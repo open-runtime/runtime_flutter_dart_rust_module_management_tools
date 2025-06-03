@@ -303,33 +303,39 @@ sync_changelogs.py
 
 ## Development
 
-### Setting Up Development Environment
+**Important**: See [DEVELOPMENT.md](DEVELOPMENT.md) for comprehensive development documentation.
+
+### Quick Start for Developers
 
 ```bash
 # Clone the repository
 git clone https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools.git
 cd runtime_flutter_dart_rust_package_management_tools
 
+# Create and activate virtual environment (REQUIRED)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
 # Install in development mode
 pip install -e .[dev]
 
-# Run tests
-pytest
-
-# Format code
-black tooling/
-isort tooling/
-
-# Type checking
-mypy tooling/
+# Test the installation
+runtime_fdr_tools --help
 ```
+
+### Key Points
+
+- **Virtual Environment Required**: Modern Python (PEP 668) requires venv
+- **Unified CLI**: All commands through `runtime_fdr_tools`
+- **Auto-discovery**: Commands map to Python files in `tooling/cli/`
+- **Development Mode**: Use `pip install -e .` for live code changes
 
 ### Adding New Commands
 
-1. Create a new module in `tooling/cli/`
-2. Add entry point in `setup.py` and `pyproject.toml`
-3. Update `tooling/cli/__init__.py`
-4. Add documentation to README
+1. Create `tooling/cli/your_command.py`
+2. Command is automatically available as `runtime_fdr_tools your_command`
+3. Add aliases in `main_router.py` if desired
+4. See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed instructions
 
 ## Troubleshooting
 
