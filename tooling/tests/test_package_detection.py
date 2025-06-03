@@ -63,7 +63,7 @@ environment:
 dependencies:
   ffi: ^2.0.0
 """)
-        
+    
         # Create flutter directory and pubspec.yaml
         flutter_dir = project_dir / "flutter"
         flutter_dir.mkdir()
@@ -103,8 +103,8 @@ edition = "2021"
         
         # Change to project directory
         os.chdir(project_dir)
-        
-        # Detect package names
+    
+    # Detect package names
         names = detect_package_names()
         
         # Verify detected names
@@ -265,7 +265,7 @@ version = "0.0.1"
             package_info = get_package_info()
             
             print_color(Colors.GREEN, "\n✓ Package configurations:")
-            for key, info in package_info.items():
+        for key, info in package_info.items():
                 print_color(Colors.BLUE, f"\n  {key}:")
                 print_color(Colors.GRAY, f"    Name:        {info['name']}")
                 print_color(Colors.GRAY, f"    Changelog:   {info['changelog']}")

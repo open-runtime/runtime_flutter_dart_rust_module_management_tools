@@ -34,7 +34,7 @@ if str(script_dir) not in sys.path:
     sys.path.insert(0, str(script_dir))
 
 # Import our common configuration
-# Support both direct execution and package imports
+    # Support both direct execution and package imports
 import sys
 import os
 
@@ -1070,7 +1070,7 @@ class FastFileAnalyzer:
                 packages[package].append(clean_file)
         
         return dict(packages)
-    
+            
     @staticmethod
     def get_limited_diff(file: str, max_lines: int) -> str:
         """Get diff with size limit for performance"""

@@ -1,6 +1,6 @@
-# Development Guide for Runtime FDR Package Tools
+# Development Guide for Runtime FDR (Flutter, Dart, Rust) Package Tools
 
-This guide covers everything you need to know to develop, test, and contribute to the Runtime FDR Package Tools.
+This guide covers everything you need to know to develop, test, and contribute to the Runtime FDR (Flutter, Dart, Rust) Package Tools.
 
 ## Table of Contents
 
@@ -119,6 +119,9 @@ runtime_fdr_tools --list
 
 # Show usage examples
 runtime_fdr_tools --examples
+
+# Show help for all commands at once
+runtime_fdr_tools --help-all
 
 # Run a specific command
 runtime_fdr_tools smart_commit_fast

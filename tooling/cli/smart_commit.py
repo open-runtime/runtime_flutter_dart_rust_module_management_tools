@@ -31,7 +31,7 @@ if str(script_dir) not in sys.path:
     sys.path.insert(0, str(script_dir))
 
 # Import our common configuration
-# Support both direct execution and package imports
+    # Support both direct execution and package imports
 import sys
 import os
 
@@ -275,44 +275,44 @@ class FileCategorizer:
                 "Flutter": [],
                 "Rust": [],
                 "Tooling": [],
-                "Docs": [],
-                "Config": [],
-                "Tests": [],
-                "Top-Level": [],
-                "Other": []
-            }
+            "Docs": [],
+            "Config": [],
+            "Tests": [],
+            "Top-Level": [],
+            "Other": []
+        }
+        
+        for file in files:
+            if not file:
+                continue
             
-            for file in files:
-                if not file:
-                    continue
-                
-                # Extract filename from git status format
-                clean_file = re.sub(r'^[MADRCU?!]\s+', '', file.strip())
-                
-                # Categorize by location and type
-                if clean_file.startswith("dart/rust/"):
-                    categories["Rust"].append(clean_file)
-                elif clean_file.startswith("flutter/"):
-                    categories["Flutter"].append(clean_file)
-                elif clean_file.startswith("dart/"):
-                    categories["Dart"].append(clean_file)
-                elif clean_file.startswith("tooling/"):
-                    categories["Tooling"].append(clean_file)
-                elif re.match(r'^(README|LICENSE|CHANGELOG|CONTRIBUTING)', clean_file) or \
-                     (clean_file.endswith(('.md', '.txt')) and '/' not in clean_file):
-                    categories["Docs"].append(clean_file)
-                elif re.match(r'^(Makefile|\.github/|\.gitignore|\.editorconfig)', clean_file) or \
-                     (clean_file.endswith(('.yml', '.yaml', '.json', '.toml')) and '/' not in clean_file):
-                    categories["Config"].append(clean_file)
-                elif clean_file.endswith(('_test.dart', '_test.rs', '_test.py')) or \
-                     clean_file.startswith('test/'):
-                    categories["Tests"].append(clean_file)
-                elif '/' not in clean_file:
-                    categories["Top-Level"].append(clean_file)
-                else:
-                    categories["Other"].append(clean_file)
+            # Extract filename from git status format
+            clean_file = re.sub(r'^[MADRCU?!]\s+', '', file.strip())
             
-            return categories
+            # Categorize by location and type
+            if clean_file.startswith("dart/rust/"):
+                categories["Rust"].append(clean_file)
+            elif clean_file.startswith("flutter/"):
+                categories["Flutter"].append(clean_file)
+            elif clean_file.startswith("dart/"):
+                categories["Dart"].append(clean_file)
+            elif clean_file.startswith("tooling/"):
+                categories["Tooling"].append(clean_file)
+            elif re.match(r'^(README|LICENSE|CHANGELOG|CONTRIBUTING)', clean_file) or \
+                 (clean_file.endswith(('.md', '.txt')) and '/' not in clean_file):
+                categories["Docs"].append(clean_file)
+            elif re.match(r'^(Makefile|\.github/|\.gitignore|\.editorconfig)', clean_file) or \
+                 (clean_file.endswith(('.yml', '.yaml', '.json', '.toml')) and '/' not in clean_file):
+                categories["Config"].append(clean_file)
+            elif clean_file.endswith(('_test.dart', '_test.rs', '_test.py')) or \
+                 clean_file.startswith('test/'):
+                categories["Tests"].append(clean_file)
+            elif '/' not in clean_file:
+                categories["Top-Level"].append(clean_file)
+            else:
+                categories["Other"].append(clean_file)
+        
+        return categories
 
 # ============================================================================
 # GIT OPERATIONS
@@ -721,11 +721,11 @@ class SmartCommit:
         else:
             # For dart/flutter/rust structure, use predefined order
             for package in ["Dart", "Flutter", "Rust", "Tooling", "Docs", 
-                           "Config", "Tests", "Top-Level", "Other"]:
+                           "Config", "Tests", "Top-Level", "Other",]:
                 if package in analyses and analyses[package] != "NO_CHANGES":
                     all_individual_analyses.append(f"{package.upper()} PACKAGE:")
                     all_individual_analyses.append(analyses[package])
-                    all_individual_analyses.append("")
+                all_individual_analyses.append("")
         
         all_analyses_text = '\n'.join(all_individual_analyses)
         

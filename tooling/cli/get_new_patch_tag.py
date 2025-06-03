@@ -16,27 +16,29 @@ import subprocess
 import sys
 import re
 import os
+import argparse
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from functools import total_ordering
+from pathlib import Path
 
-# ============================================================================
-# CONSTANTS
-# ============================================================================
+# Add parent directory to path for imports
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ANSI color codes
-class Colors:
-    RED = '\033[91m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    RESET = '\033[0m'
-    
-    @classmethod
-    def print_color(cls, color: str, message: str, file=None):
-        """Print colored message to stderr by default"""
-        print(f"{color}{message}{cls.RESET}", file=file or sys.stderr)
+try:
+    from tooling.cli.cli_utils import (
+        setup_cli_logging, add_common_arguments,
+        print_info, print_success, print_error, print_warning,
+        print_header, print_section
+    )
+except ImportError:
+    from cli_utils import (
+        setup_cli_logging, add_common_arguments,
+        print_info, print_success, print_error, print_warning,
+        print_header, print_section
+    )
+
 
 # ============================================================================
 # VERSION HANDLING
@@ -174,9 +176,10 @@ class GitOperations:
 class TagGenerator:
     """Generate next patch version tag"""
     
-    def __init__(self):
+    def __init__(self, logger):
         self.git = GitOperations()
         self.github_url = self.git.get_github_url()
+        self.logger = logger
         
     def get_semantic_version_tags(self) -> List[SemanticVersion]:
         """Get all semantic version tags from the repository
@@ -209,12 +212,14 @@ class TagGenerator:
         
         if latest_version is None:
             # No semantic version tags found, start with v0.0.1
-            Colors.print_color(Colors.YELLOW, "⚠️  No semantic version tags found. Starting with v0.0.1")
+            print_warning("No semantic version tags found. Starting with v0.0.1")
+            self.logger.info("No semantic version tags found, starting with v0.0.1")
             return None, "v0.0.1"
         
         # Validate version parts (redundant with parse, but matches bash script behavior)
         if (latest_version.major < 0 or latest_version.minor < 0 or latest_version.patch < 0):
-            Colors.print_color(Colors.RED, f"❌ Error: Invalid version format in tag {latest_version}")
+            print_error(f"Invalid version format in tag {latest_version}")
+            self.logger.error("Invalid version format", tag=str(latest_version))
             sys.exit(1)
         
         # Increment patch version
@@ -223,8 +228,9 @@ class TagGenerator:
         # Check if new tag already exists (shouldn't happen, but be safe)
         new_tag = str(new_version)
         if self.git.tag_exists(new_tag):
-            Colors.print_color(Colors.RED, f"❌ Error: Tag {new_tag} already exists!")
-            Colors.print_color(Colors.YELLOW, "⚠️  This might indicate a sync issue. Please check your tags.")
+            print_error(f"Tag {new_tag} already exists!")
+            print_warning("This might indicate a sync issue. Please check your tags.")
+            self.logger.error("Tag already exists", tag=new_tag)
             sys.exit(1)
             
         return str(latest_version), new_tag
@@ -246,58 +252,42 @@ class TagGenerator:
         """Main execution logic"""
         # Check if we're in a git repository
         if not self.git.is_git_repository():
-            Colors.print_color(Colors.RED, "❌ Error: Not in a git repository")
+            print_error("Not in a git repository")
+            self.logger.error("Not in a git repository")
             sys.exit(1)
             
         # Generate new tag
         latest_tag, new_tag = self.generate_new_tag()
         
         # Print a header
-        print(f"\n{Colors.BLUE}{'='*60}{Colors.RESET}")
-        print(f"{Colors.BLUE}🏷️  Git Tag Information{Colors.RESET}")
-        print(f"{Colors.BLUE}{'='*60}{Colors.RESET}\n")
+        print_header("Git Tag Information", width=60)
         
-        # Output results with colors (to stdout, matching bash script behavior)
+        # Output results
         if latest_tag:
-            print(f"{Colors.YELLOW}📌 Latest tag:{Colors.RESET} {Colors.GREEN}{latest_tag}{Colors.RESET}")
+            print_info(f"📌 Latest tag: {latest_tag}")
+            self.logger.info("Found latest tag", tag=latest_tag)
         else:
-            print(f"{Colors.YELLOW}📌 Latest tag:{Colors.RESET} none")
+            print_info("📌 Latest tag: none")
         
         # Output clickable link for latest tag if available
         if latest_tag and self.github_url:
             latest_url = self.format_tag_url(latest_tag)
             if latest_url:
-                print(f"{Colors.YELLOW}🔗 Latest tag URL:{Colors.RESET} {Colors.BLUE}{latest_url}{Colors.RESET}")
+                print_info(f"🔗 Latest tag URL: {latest_url}")
         
         print()  # Empty line for spacing
-        print(f"{Colors.YELLOW}✨ New tag:{Colors.RESET} {Colors.GREEN}{new_tag}{Colors.RESET}")
+        print_success(f"New tag: {new_tag}")
+        self.logger.info("Generated new tag", new_tag=new_tag)
         
         # Output clickable link for new tag if GitHub URL available
         if self.github_url:
             new_url = self.format_tag_url(new_tag)
             if new_url:
-                print(f"{Colors.YELLOW}🔗 New tag URL:{Colors.RESET} {Colors.BLUE}{new_url}{Colors.RESET}")
+                print_info(f"🔗 New tag URL: {new_url}")
         else:
-            print(f"\n{Colors.YELLOW}ℹ️  Note:{Colors.RESET} GitHub remote not detected - no release URLs available")
+            print_warning("\nNote: GitHub remote not detected - no release URLs available")
         
-        print(f"\n{Colors.BLUE}{'='*60}{Colors.RESET}\n")
-
-# ============================================================================
-# COMMON CONFIG COMPATIBILITY
-# ============================================================================
-
-def load_common_config():
-    """Load configuration from common_config.sh if available
-    
-    This maintains compatibility with the bash script's sourcing of common_config.sh
-    """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_file = os.path.join(script_dir, 'common_config.sh')
-    
-    if os.path.exists(config_file):
-        # We could parse the bash file if needed, but for this script
-        # we only use print_color which we've implemented directly
-        pass
+        print()
 
 # ============================================================================
 # MAIN ENTRY POINT
@@ -305,11 +295,34 @@ def load_common_config():
 
 def main():
     """Entry point"""
-    # Load common config for compatibility (though not used in this script)
-    load_common_config()
+    # Setup argument parser
+    parser = argparse.ArgumentParser(
+        description='Determine the next patch version tag for the repository',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                    # Get next patch version
+  %(prog)s --verbose          # Show detailed logging
+        """
+    )
+    
+    # Add common arguments
+    add_common_arguments(parser)
+    
+    # Parse arguments
+    args = parser.parse_args()
+    
+    # Setup logging
+    logger = setup_cli_logging(
+        tool_name="get_new_patch_tag",
+        verbose=args.verbose,
+        debug=args.debug,
+        quiet=args.quiet,
+        json_output=args.json
+    )
     
     # Run the tag generator
-    generator = TagGenerator()
+    generator = TagGenerator(logger)
     generator.run()
 
 if __name__ == "__main__":

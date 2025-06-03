@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py - Main entry point for Runtime FDR Package Tools
+main.py - Main entry point for Runtime FDR (Flutter, Dart, Rust) Package Tools
 
 This provides a unified interface to all the CLI tools in the package.
 
@@ -166,12 +166,12 @@ def display_examples(logger):
 
 def main():
     """Main entry point"""
-    # Setup logging
-    logger = setup_logging(tool_name="rfdr-tools")
+    # Setup logging with ERROR level for help display to avoid clutter
+    logger = setup_logging(tool_name="rfdr-tools", level="ERROR")
     logger.debug("Starting rfdr-tools CLI")
     
     parser = argparse.ArgumentParser(
-        description='Runtime FDR Package Tools - Unified CLI for multi-package repository management',
+        description='Runtime FDR (Flutter, Dart, Rust) Package Tools - Unified CLI for multi-package repository management',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 For more information on a specific command, run:
@@ -206,55 +206,61 @@ Examples:
     args = parser.parse_args()
     
     # Header
-    print_color(Colors.PURPLE, "=" * 60)
-    print_color(Colors.PURPLE, "Runtime FDR Package Tools (rfdr-tools)")
-    print_color(Colors.PURPLE, "=" * 60)
+    print(f"{Colors.PURPLE}{'=' * 60}{Colors.NC}")
+    print(f"{Colors.PURPLE}Runtime FDR (Flutter, Dart, Rust) Package Tools (rfdr-tools){Colors.NC}")
+    print(f"{Colors.PURPLE}{'=' * 60}{Colors.NC}")
     print()
-    print_color(Colors.BLUE, "A comprehensive suite of CLI tools for managing multi-package repositories")
-    print_color(Colors.BLUE, "with AI-powered commit messages, changelog generation, and release automation.")
+    print(f"{Colors.BLUE}A comprehensive suite of CLI tools for managing multi-package repositories{Colors.NC}")
+    print(f"{Colors.BLUE}with AI-powered commit messages, changelog generation, and release automation.{Colors.NC}")
     print()
+    
+    logger.debug("Displaying tool help", list_mode=args.list, detailed=args.detailed, examples=args.examples)
     
     if args.list:
         # Simple list format
-        print_color(Colors.YELLOW, "Available Commands:")
+        print(f"{Colors.YELLOW}Available Commands:{Colors.NC}")
         all_commands = []
         for category, tools in TOOL_CATEGORIES.items():
             for alias, command, module, desc in tools:
                 all_commands.append((alias, desc))
         
+        logger.debug("Listing commands", command_count=len(all_commands))
         for cmd, desc in sorted(all_commands):
             print(f"  {cmd:<20} {desc}")
     
     elif args.examples:
         # Show examples only
-        display_examples()
+        display_examples(logger)
     
     else:
         # Show categorized commands
-        print_color(Colors.YELLOW, "Available Commands by Category:")
+        print(f"{Colors.YELLOW}Available Commands by Category:{Colors.NC}")
         print()
         
         for category, tools in TOOL_CATEGORIES.items():
-            print_color(Colors.PURPLE, f"{category}:")
+            print(f"{Colors.PURPLE}{category}:{Colors.NC}")
+            logger.debug("Displaying category", category=category, tool_count=len(tools))
             for alias, command, module, description in tools:
-                display_tool_info(alias, command, module, description, args.detailed)
+                display_tool_info(alias, command, module, description, args.detailed, logger)
             print()
         
         # Quick start section
-        print_color(Colors.PURPLE, "Quick Start:")
-        print_color(Colors.GREEN, "  1. Run 'rt-setup' to configure API keys and install dependencies")
-        print_color(Colors.GREEN, "  2. Use 'rtc' for fast AI-powered commit messages")
-        print_color(Colors.GREEN, "  3. Use 'rtcl' to generate changelog entries")
-        print_color(Colors.GREEN, "  4. Use 'rtr' for the complete release workflow")
+        print(f"{Colors.PURPLE}Quick Start:{Colors.NC}")
+        print(f"{Colors.GREEN}  1. Run 'rt-setup' to configure API keys and install dependencies{Colors.NC}")
+        print(f"{Colors.GREEN}  2. Use 'rtc' for fast AI-powered commit messages{Colors.NC}")
+        print(f"{Colors.GREEN}  3. Use 'rtcl' to generate changelog entries{Colors.NC}")
+        print(f"{Colors.GREEN}  4. Use 'rtr' for the complete release workflow{Colors.NC}")
         print()
         
         # Show examples if not in detailed mode
         if not args.detailed:
-            print_color(Colors.GRAY, "Run 'rfdr-tools --examples' to see usage examples")
-            print_color(Colors.GRAY, "Run 'rfdr-tools --detailed' to see detailed help for all commands")
+            print(f"{Colors.GRAY}Run 'rfdr-tools --examples' to see usage examples{Colors.NC}")
+            print(f"{Colors.GRAY}Run 'rfdr-tools --detailed' to see detailed help for all commands{Colors.NC}")
     
     print()
-    print_color(Colors.GRAY, "For more information: https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools")
+    print(f"{Colors.GRAY}For more information: https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools{Colors.NC}")
+    
+    logger.debug("rfdr-tools CLI completed successfully")
 
 
 if __name__ == "__main__":

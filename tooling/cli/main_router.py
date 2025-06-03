@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main_router.py - Main router for Runtime FDR Package Tools
+main_router.py - Main router for Runtime FDR (Flutter, Dart, Rust) Package Tools
 
 This provides a unified interface using subcommands for all CLI tools.
 Commands map directly to Python files in the tooling/cli directory.
@@ -30,18 +30,22 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from tooling.core.common_config import Colors, print_color
+    from tooling.core.logging import setup_logging, get_logger
+    from tooling.core.common_config import Colors
 except ImportError:
-    from core.common_config import Colors, print_color
+    from core.logging import setup_logging, get_logger
+    from core.common_config import Colors
 
 
-def discover_commands() -> Dict[str, Dict[str, str]]:
+def discover_commands(logger) -> Dict[str, Dict[str, str]]:
     """Automatically discover all CLI commands from Python files"""
     commands = {}
     cli_dir = Path(__file__).parent
     
     # Files to exclude from command discovery
     exclude_files = {'__init__.py', 'main.py', 'main_router.py', '__pycache__'}
+    
+    logger.debug("Discovering CLI commands", cli_dir=str(cli_dir))
     
     # Scan for Python files
     for file_path in cli_dir.glob('*.py'):
@@ -109,8 +113,8 @@ def get_file_description(file_path: Path) -> str:
     return default_descriptions.get(file_path.stem, f"Run {file_path.stem} tool")
 
 
-# Discover all available commands
-COMMANDS = discover_commands()
+# Commands will be discovered when main() runs
+COMMANDS = {}
 
 # Define command aliases for convenience
 ALIASES = {
@@ -186,23 +190,24 @@ def get_command_groups():
     return {k: v for k, v in groups.items() if v}
 
 
-def run_command(command: str, args: List[str]):
+def run_command(command: str, args: List[str], logger):
     """Run the specified command with arguments"""
+    logger.debug("Running command", command=command, args_count=len(args))
     # Resolve aliases
     if command in ALIASES:
         command = ALIASES[command]
     
     if command not in COMMANDS:
-        print_color(Colors.RED, f"Error: Unknown command '{command}'")
-        print_color(Colors.YELLOW, "\nAvailable commands:")
-        list_commands()
+        print(f"{Colors.RED}Error: Unknown command '{command}'{Colors.NC}")
+        print(f"{Colors.YELLOW}\nAvailable commands:{Colors.NC}")
+        list_commands(logger=logger)
         sys.exit(1)
     
     module_name = COMMANDS[command]["module"]
     script_path = Path(__file__).parent / f"{module_name}.py"
     
     if not script_path.exists():
-        print_color(Colors.RED, f"Error: Command implementation not found: {script_path}")
+        print(f"{Colors.RED}Error: Command implementation not found: {script_path}{Colors.NC}")
         sys.exit(1)
     
     # Run the command
@@ -211,15 +216,17 @@ def run_command(command: str, args: List[str]):
         result = subprocess.run(cmd)
         sys.exit(result.returncode)
     except KeyboardInterrupt:
-        print_color(Colors.YELLOW, "\nOperation cancelled by user")
+        print(f"{Colors.YELLOW}\nOperation cancelled by user{Colors.NC}")
         sys.exit(1)
     except Exception as e:
-        print_color(Colors.RED, f"Error running command: {e}")
+        print(f"{Colors.RED}Error running command: {e}{Colors.NC}")
         sys.exit(1)
 
 
-def list_commands(detailed: bool = False):
+def list_commands(detailed: bool = False, logger=None):
     """List all available commands"""
+    if logger:
+        logger.debug("Listing commands", detailed=detailed)
     groups = get_command_groups()
     
     # Build reverse alias mapping
@@ -230,7 +237,7 @@ def list_commands(detailed: bool = False):
         reverse_aliases[cmd].append(alias)
     
     for group_name, commands in groups.items():
-        print_color(Colors.PURPLE, f"\n{group_name}:")
+        print(f"{Colors.PURPLE}\n{group_name}:{Colors.NC}")
         
         for cmd in commands:
             if cmd in COMMANDS:
@@ -253,8 +260,9 @@ def list_commands(detailed: bool = False):
                     print()
 
 
-def show_examples():
+def show_examples(logger):
     """Show usage examples"""
+    logger.debug("Showing usage examples")
     examples = [
         ("Daily Development", [
             ("smart_commit_fast", "Generate fast AI commit message"),
@@ -282,19 +290,129 @@ def show_examples():
         ]),
     ]
     
-    print_color(Colors.PURPLE, "\nUsage Examples:")
+    print(f"{Colors.PURPLE}\nUsage Examples:{Colors.NC}")
     
     for category, cmds in examples:
-        print_color(Colors.YELLOW, f"\n{category}:")
+        print(f"{Colors.YELLOW}\n{category}:{Colors.NC}")
         for cmd, desc in cmds:
             print(f"  $ runtime_fdr_tools {cmd:<35} # {desc}")
 
 
+def show_all_help(logger):
+    """Show help for all commands in a formatted table"""
+    logger.debug("Showing help for all commands")
+    groups = get_command_groups()
+    
+    # Build reverse alias mapping
+    reverse_aliases = {}
+    for alias, cmd in ALIASES.items():
+        if cmd not in reverse_aliases:
+            reverse_aliases[cmd] = []
+        reverse_aliases[cmd].append(alias)
+    
+    print(f"{Colors.PURPLE}{'=' * 80}{Colors.NC}")
+    print(f"{Colors.PURPLE}RUNTIME FDR TOOLS - COMPLETE COMMAND REFERENCE{Colors.NC}")
+    print(f"{Colors.PURPLE}{'=' * 80}{Colors.NC}")
+    print()
+    
+    for group_name, commands in groups.items():
+        print(f"{Colors.YELLOW}\n{'─' * 70}{Colors.NC}")
+        print(f"{Colors.YELLOW}▶ {group_name}{Colors.NC}")
+        print(f"{Colors.YELLOW}{'─' * 70}{Colors.NC}")
+        
+        for cmd in commands:
+            if cmd in COMMANDS:
+                info = COMMANDS[cmd]
+                
+                # Get aliases for this command
+                aliases = reverse_aliases.get(cmd, [])
+                
+                # Print command header
+                print()
+                if aliases:
+                    print(f"{Colors.GREEN}● {cmd} {Colors.GRAY}(aliases: {', '.join(sorted(aliases))}){Colors.NC}")
+                else:
+                    print(f"{Colors.GREEN}● {cmd}{Colors.NC}")
+                
+                print(f"{Colors.BLUE}  {info['description']}{Colors.NC}")
+                
+                # Get help text for this command
+                script_path = Path(__file__).parent / f"{cmd}.py"
+                if script_path.exists():
+                    try:
+                        # Run command with --help
+                        result = subprocess.run(
+                            [sys.executable, str(script_path), "--help"],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        
+                        if result.returncode == 0 and result.stdout:
+                            # Process help output
+                            help_lines = result.stdout.strip().split('\n')
+                            
+                            # Find usage line
+                            usage_found = False
+                            for line in help_lines:
+                                if line.strip().startswith('usage:'):
+                                    # Clean up usage line
+                                    usage = line.strip()
+                                    # Replace script path with runtime_fdr_tools command
+                                    usage = usage.replace(str(script_path), f"runtime_fdr_tools {cmd}")
+                                    usage = usage.replace(f"{cmd}.py", f"runtime_fdr_tools {cmd}")
+                                    print(f"{Colors.GRAY}  {usage}{Colors.NC}")
+                                    usage_found = True
+                                    break
+                            
+                            # Extract options
+                            in_options = False
+                            options_lines = []
+                            for line in help_lines:
+                                if 'optional arguments:' in line.lower() or 'options:' in line.lower():
+                                    in_options = True
+                                    continue
+                                elif in_options and line.strip() and not line.startswith(' '):
+                                    break
+                                elif in_options and line.strip():
+                                    options_lines.append(line)
+                            
+                            if options_lines:
+                                print(f"{Colors.BLUE}  Options:{Colors.NC}")
+                                for opt_line in options_lines[:5]:  # Show first 5 options
+                                    print(f"    {opt_line.strip()}")
+                                if len(options_lines) > 5:
+                                    print(f"{Colors.GRAY}    ... and {len(options_lines) - 5} more options{Colors.NC}")
+                        
+                    except subprocess.TimeoutExpired:
+                        print(f"{Colors.RED}  (Help timeout){Colors.NC}")
+                    except Exception as e:
+                        print(f"{Colors.RED}  (Error getting help: {e}){Colors.NC}")
+                
+                print()
+    
+    print(f"{Colors.PURPLE}{'=' * 80}{Colors.NC}")
+    print(f"{Colors.GRAY}\nFor detailed help on any command, run:{Colors.NC}")
+    print(f"{Colors.GREEN}  runtime_fdr_tools <command> --help{Colors.NC}")
+    print()
+    print(f"{Colors.GRAY}To see usage examples, run:{Colors.NC}")
+    print(f"{Colors.GREEN}  runtime_fdr_tools --examples{Colors.NC}")
+    print()
+
+
 def main():
     """Main entry point"""
+    # Setup logging
+    logger = setup_logging(tool_name="runtime_fdr_tools", level="ERROR")
+    logger.debug("Starting runtime_fdr_tools router")
+    
+    # Discover commands
+    global COMMANDS
+    COMMANDS = discover_commands(logger)
+    
     parser = argparse.ArgumentParser(
         prog='runtime_fdr_tools',
-        description='Runtime FDR Package Tools - Unified CLI for multi-package repository management',
+        description='Runtime FDR (Flutter, Dart, Rust) Package Tools - Unified CLI for multi-package repository management',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Commands map directly to Python files in the tooling/cli directory.
@@ -338,42 +456,52 @@ Using aliases:
         help='Show usage examples'
     )
     
+    parser.add_argument(
+        '--help-all',
+        action='store_true',
+        help='Show detailed help for all commands'
+    )
+    
     # Parse known args to handle our flags
     args, remaining = parser.parse_known_args()
     
     # Header
-    if not args.command or args.list or args.examples:
-        print_color(Colors.PURPLE, "=" * 60)
-        print_color(Colors.PURPLE, "Runtime FDR Package Tools (runtime_fdr_tools)")
-        print_color(Colors.PURPLE, "=" * 60)
+    if not args.command or args.list or args.examples or args.help_all:
+        print(f"{Colors.PURPLE}{'=' * 60}{Colors.NC}")
+        print(f"{Colors.PURPLE}Runtime FDR (Flutter, Dart, Rust) Package Tools (runtime_fdr_tools){Colors.NC}")
+        print(f"{Colors.PURPLE}{'=' * 60}{Colors.NC}")
         print()
     
     # Handle special flags
+    if args.help_all:
+        show_all_help(logger)
+        return
+    
     if args.list:
-        list_commands(detailed=True)
+        list_commands(detailed=True, logger=logger)
         print()
         return
     
     if args.examples:
-        show_examples()
+        show_examples(logger)
         print()
         return
     
     # If no command specified, show help
     if not args.command:
-        print_color(Colors.BLUE, "A comprehensive suite of CLI tools for managing multi-package repositories")
-        print_color(Colors.BLUE, "with AI-powered commit messages, changelog generation, and release automation.")
-        list_commands()
+        print(f"{Colors.BLUE}A comprehensive suite of CLI tools for managing multi-package repositories{Colors.NC}")
+        print(f"{Colors.BLUE}with AI-powered commit messages, changelog generation, and release automation.{Colors.NC}")
+        list_commands(logger=logger)
         print()
-        print_color(Colors.GRAY, "Run 'runtime_fdr_tools --examples' for usage examples")
-        print_color(Colors.GRAY, "Run 'runtime_fdr_tools <command> --help' for command-specific help")
+        print(f"{Colors.GRAY}Run 'runtime_fdr_tools --examples' for usage examples{Colors.NC}")
+        print(f"{Colors.GRAY}Run 'runtime_fdr_tools <command> --help' for command-specific help{Colors.NC}")
         print()
         return
     
     # Run the specified command
     # Combine remaining args with args.args
     all_args = remaining + (args.args or [])
-    run_command(args.command, all_args)
+    run_command(args.command, all_args, logger)
 
 
 if __name__ == "__main__":

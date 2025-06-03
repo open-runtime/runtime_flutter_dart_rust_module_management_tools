@@ -1,4 +1,4 @@
-# Runtime FDR Package Tools - Multi-Package Repository Management Suite
+# Runtime FDR (Flutter, Dart, Rust) Package Tools - Multi-Package Repository Management Suite
 
 A comprehensive collection of CLI tools for managing multi-package repositories with AI-powered commit messages, changelog generation, and release automation.
 
@@ -127,6 +127,7 @@ Commands map directly to Python files in the tooling/cli directory.
 |---------|-------------|
 | `--list` | Show all available commands with descriptions |
 | `--examples` | Show usage examples |
+| `--help-all` | Show detailed help for all commands in one view |
 
 ### AI-Powered Commit Tools
 
