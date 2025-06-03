@@ -31,8 +31,7 @@ if str(script_dir) not in sys.path:
     sys.path.insert(0, str(script_dir))
 
 # Import our common configuration
-try:
-    # Support both direct execution and package imports
+# Support both direct execution and package imports
 import sys
 import os
 
@@ -224,51 +223,96 @@ class FileCategorizer:
     """Categorize files by package and scope"""
     
     @staticmethod
-    def categorize_files(files: List[str]) -> Dict[str, List[str]]:
+    def categorize_files(files: List[str], any_structure: bool = False) -> Dict[str, List[str]]:
         """Categorize files into packages"""
-        categories = {
-            "Dart": [],
-            "Flutter": [],
-            "Rust": [],
-            "Tooling": [],
-            "Docs": [],
-            "Config": [],
-            "Tests": [],
-            "Top-Level": [],
-            "Other": []
-        }
-        
-        for file in files:
-            if not file:
-                continue
+        if any_structure:
+            # For any repository structure, categorize by directory
+            categories = {}
             
-            # Extract filename from git status format
-            clean_file = re.sub(r'^[MADRCU?!]\s+', '', file.strip())
+            for file in files:
+                if not file:
+                    continue
+                
+                # Extract filename from git status format
+                clean_file = re.sub(r'^[MADRCU?!]\s+', '', file.strip())
+                
+                # Categorize by directory structure
+                if '/' not in clean_file:
+                    # Root-level file
+                    category = "Top-Level"
+                else:
+                    # Use first directory as category
+                    parts = clean_file.split('/')
+                    first_dir = parts[0]
+                    
+                    # Special handling for common directories
+                    if first_dir.startswith('.'):
+                        category = "Config"
+                    elif first_dir in ['test', 'tests', 'spec', 'specs']:
+                        category = "Tests"
+                    elif first_dir in ['doc', 'docs', 'documentation']:
+                        category = "Docs"
+                    elif first_dir in ['src', 'lib', 'pkg']:
+                        # For src/lib/pkg, use the second level if available
+                        if len(parts) > 1 and parts[1]:
+                            category = parts[1].capitalize()
+                        else:
+                            category = first_dir.capitalize()
+                    else:
+                        category = first_dir.capitalize()
+                
+                # Initialize category if not exists
+                if category not in categories:
+                    categories[category] = []
+                
+                categories[category].append(clean_file)
             
-            # Categorize by location and type
-            if clean_file.startswith("dart/rust/"):
-                categories["Rust"].append(clean_file)
-            elif clean_file.startswith("flutter/"):
-                categories["Flutter"].append(clean_file)
-            elif clean_file.startswith("dart/"):
-                categories["Dart"].append(clean_file)
-            elif clean_file.startswith("tooling/"):
-                categories["Tooling"].append(clean_file)
-            elif re.match(r'^(README|LICENSE|CHANGELOG|CONTRIBUTING)', clean_file) or \
-                 (clean_file.endswith(('.md', '.txt')) and '/' not in clean_file):
-                categories["Docs"].append(clean_file)
-            elif re.match(r'^(Makefile|\.github/|\.gitignore|\.editorconfig)', clean_file) or \
-                 (clean_file.endswith(('.yml', '.yaml', '.json', '.toml')) and '/' not in clean_file):
-                categories["Config"].append(clean_file)
-            elif clean_file.endswith(('_test.dart', '_test.rs', '_test.py')) or \
-                 clean_file.startswith('test/'):
-                categories["Tests"].append(clean_file)
-            elif '/' not in clean_file:
-                categories["Top-Level"].append(clean_file)
-            else:
-                categories["Other"].append(clean_file)
-        
-        return categories
+            return categories
+        else:
+            # Original behavior for dart/flutter/rust structure
+            categories = {
+                "Dart": [],
+                "Flutter": [],
+                "Rust": [],
+                "Tooling": [],
+                "Docs": [],
+                "Config": [],
+                "Tests": [],
+                "Top-Level": [],
+                "Other": []
+            }
+            
+            for file in files:
+                if not file:
+                    continue
+                
+                # Extract filename from git status format
+                clean_file = re.sub(r'^[MADRCU?!]\s+', '', file.strip())
+                
+                # Categorize by location and type
+                if clean_file.startswith("dart/rust/"):
+                    categories["Rust"].append(clean_file)
+                elif clean_file.startswith("flutter/"):
+                    categories["Flutter"].append(clean_file)
+                elif clean_file.startswith("dart/"):
+                    categories["Dart"].append(clean_file)
+                elif clean_file.startswith("tooling/"):
+                    categories["Tooling"].append(clean_file)
+                elif re.match(r'^(README|LICENSE|CHANGELOG|CONTRIBUTING)', clean_file) or \
+                     (clean_file.endswith(('.md', '.txt')) and '/' not in clean_file):
+                    categories["Docs"].append(clean_file)
+                elif re.match(r'^(Makefile|\.github/|\.gitignore|\.editorconfig)', clean_file) or \
+                     (clean_file.endswith(('.yml', '.yaml', '.json', '.toml')) and '/' not in clean_file):
+                    categories["Config"].append(clean_file)
+                elif clean_file.endswith(('_test.dart', '_test.rs', '_test.py')) or \
+                     clean_file.startswith('test/'):
+                    categories["Tests"].append(clean_file)
+                elif '/' not in clean_file:
+                    categories["Top-Level"].append(clean_file)
+                else:
+                    categories["Other"].append(clean_file)
+            
+            return categories
 
 # ============================================================================
 # GIT OPERATIONS
@@ -389,9 +433,10 @@ class GitOperations:
 class AIAnalyzer:
     """Handle AI-powered analysis using Gemini"""
     
-    def __init__(self, model: str = None):
+    def __init__(self, model: str = None, any_structure: bool = False):
         self.model = model or os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash-exp')
         self.sanitizer = TextSanitizer()
+        self.any_structure = any_structure
     
     def analyze_package_changes(self, package: str, files: List[str], diff: str) -> str:
         """Analyze changes for a specific package"""
@@ -400,7 +445,8 @@ class AIAnalyzer:
         
         files_list = '\n'.join(files)
         
-        prompt = f"""You are analyzing code changes for the {package} package in a vector search library.
+        repo_context = " in a vector search library" if not self.any_structure else ""
+        prompt = f"""You are analyzing code changes for the {package} package{repo_context}.
 
 Files changed:
 {files_list}
@@ -445,7 +491,8 @@ IMPORTANT: Output your analysis as plain text. Do NOT wrap it in markdown code b
     
     def analyze_cross_package_impacts(self, all_analyses: str) -> str:
         """Analyze cross-package dependencies and impacts"""
-        prompt = f"""You are analyzing cross-package impacts and dependencies in a vector search library.
+        repo_context = " in a vector search library" if not self.any_structure else ""
+        prompt = f"""You are analyzing cross-package impacts and dependencies{repo_context}.
 
 Individual package analyses have been completed:
 {all_analyses}
@@ -486,7 +533,8 @@ IMPORTANT: Output your analysis as plain text. Do NOT wrap it in markdown code b
                               cross_package_analysis: str, 
                               repo_level_changes: str) -> str:
         """Generate the final commit message"""
-        prompt = f"""You are creating a comprehensive git commit message for a vector search library with multiple packages.
+        repo_context = " for a vector search library" if not self.any_structure else ""
+        prompt = f"""You are creating a comprehensive git commit message{repo_context} with multiple packages.
 
 INDIVIDUAL PACKAGE ANALYSES:
 {individual_analyses}
@@ -553,11 +601,12 @@ IMPORTANT: Output the commit message as plain text. Do NOT wrap it in markdown c
 class SmartCommit:
     """Main class for smart commit functionality"""
     
-    def __init__(self):
+    def __init__(self, any_structure: bool = False):
         self.git_ops = GitOperations()
         self.categorizer = FileCategorizer()
-        self.ai_analyzer = AIAnalyzer()
+        self.ai_analyzer = AIAnalyzer(any_structure=any_structure)
         self.progress_tracker = None
+        self.any_structure = any_structure
     
     def check_prerequisites(self):
         """Check all prerequisites"""
@@ -661,12 +710,22 @@ class SmartCommit:
         
         # Compile individual analyses
         all_individual_analyses = []
-        for package in ["Dart", "Flutter", "Rust", "Tooling", "Docs", 
-                       "Config", "Tests", "Top-Level", "Other"]:
-            if package in analyses and analyses[package] != "NO_CHANGES":
-                all_individual_analyses.append(f"{package.upper()} PACKAGE:")
-                all_individual_analyses.append(analyses[package])
-                all_individual_analyses.append("")
+        
+        if self.any_structure:
+            # For any structure, use the actual package names found
+            for package in sorted(analyses.keys()):
+                if analyses[package] != "NO_CHANGES":
+                    all_individual_analyses.append(f"{package.upper()} PACKAGE:")
+                    all_individual_analyses.append(analyses[package])
+                    all_individual_analyses.append("")
+        else:
+            # For dart/flutter/rust structure, use predefined order
+            for package in ["Dart", "Flutter", "Rust", "Tooling", "Docs", 
+                           "Config", "Tests", "Top-Level", "Other"]:
+                if package in analyses and analyses[package] != "NO_CHANGES":
+                    all_individual_analyses.append(f"{package.upper()} PACKAGE:")
+                    all_individual_analyses.append(analyses[package])
+                    all_individual_analyses.append("")
         
         all_analyses_text = '\n'.join(all_individual_analyses)
         
@@ -727,7 +786,7 @@ class SmartCommit:
         
         # Categorize files
         print_color(Colors.BLUE, "\nCategorizing changes by package and scope...")
-        categorized = self.categorizer.categorize_files(all_files)
+        categorized = self.categorizer.categorize_files(all_files, self.any_structure)
         
         # Analyze and generate commit message
         try:
@@ -823,9 +882,32 @@ class SmartCommit:
 # MAIN ENTRY POINT
 # ============================================================================
 
+def parse_arguments():
+    """Parse command line arguments"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description='AI-powered commit message generator with comprehensive analysis',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                    # Analyze dart/flutter/rust structure
+  %(prog)s --any              # Work with any repository structure
+        """
+    )
+    
+    parser.add_argument(
+        '-a', '--any',
+        action='store_true',
+        help='Work with any repository structure (not just dart/flutter/rust)'
+    )
+    
+    return parser.parse_args()
+
 def main():
     """Main entry point"""
-    committer = SmartCommit()
+    args = parse_arguments()
+    committer = SmartCommit(any_structure=args.any)
     
     try:
         committer.run()

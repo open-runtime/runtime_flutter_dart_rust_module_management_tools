@@ -1,0 +1,67 @@
+# Enhanced shared dependencies for tooling upgrade
+# This file contains the recommended dependencies from SHARED_UPGRADE_GUIDE
+# Install with: pip install -r requirements-shared.txt
+
+# =============================================================================
+# Essential Core Dependencies
+# =============================================================================
+
+# CLI and UI
+click>=8.1.7          # CLI framework (already in use)
+rich>=13.7.0          # Beautiful terminal output
+tqdm>=4.66.1          # Progress bars
+
+# Configuration and Validation
+pydantic>=2.5.0       # Data validation and settings
+pydantic-settings>=2.1.0  # Settings management
+python-dotenv>=1.0.0  # Environment variable loading
+
+# Logging and Monitoring
+structlog>=24.1.0     # Structured logging
+loguru>=0.7.2         # Alternative: simpler logging
+
+# Git Operations (already have gitpython)
+GitPython>=3.1.40     # Git operations
+# pygit2>=1.13.3      # Performance-critical git ops (optional, requires C deps)
+
+# Async Support
+aiohttp>=3.9.0        # Async HTTP client (already in use)
+asyncio-throttle>=1.0.2  # Rate limiting
+
+# Testing
+pytest>=7.4.3         # Testing framework
+pytest-asyncio>=0.21.1  # Async test support
+pytest-cov>=4.1.0     # Coverage reporting
+pytest-mock>=3.12.0   # Mocking support
+
+# Code Quality
+black>=23.12.0        # Code formatting
+ruff>=0.1.9          # Fast linting
+mypy>=1.8.0          # Type checking
+pre-commit>=3.6.0     # Git hooks
+
+# =============================================================================
+# Specialized Dependencies
+# =============================================================================
+
+# For specific use cases (already have most)
+jinja2>=3.1.2         # Template engine (already in use)
+# pandas>=2.1.4       # Data analysis (optional, large dependency)
+# redis>=5.0.1        # Distributed caching (optional, requires Redis server)
+semver>=3.0.2         # Semantic versioning
+tabulate>=0.9.0       # Table formatting
+humanize>=4.9.0       # Human-readable output
+tenacity>=8.2.3       # Retry logic
+
+# =============================================================================
+# Keep existing dependencies
+# =============================================================================
+colorama>=0.4.4       # Cross-platform colored output
+requests>=2.25.0      # HTTP requests
+pyyaml>=5.4.0        # YAML parsing (already in use)
+toml>=0.10.2         # TOML parsing (already in use)
+aiofiles>=0.8.0      # Async file operations (already in use)
+networkx>=2.6.0      # Graph analysis (already in use)
+matplotlib>=3.4.0    # Visualization (already in use)
+numpy>=1.21.0        # Numerical computing (already in use)
+scikit-learn>=1.0.0  # ML for similarity (already in use)

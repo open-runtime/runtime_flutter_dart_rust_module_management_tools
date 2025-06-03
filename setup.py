@@ -48,14 +48,14 @@ extras_require = {
 extras_require['all'] = list(set(sum(extras_require.values(), [])))
 
 setup(
-    name="runtime-tooling",
+    name="runtime-fdr-pkg-tools",
     version="0.1.0",
     author="Tsavo Knott",
     author_email="your.email@example.com",
     description="A comprehensive suite of CLI tools for managing multi-package repositories",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/runtime-tooling",
+    url="https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",

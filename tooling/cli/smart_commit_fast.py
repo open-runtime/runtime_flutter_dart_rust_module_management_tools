@@ -34,8 +34,7 @@ if str(script_dir) not in sys.path:
     sys.path.insert(0, str(script_dir))
 
 # Import our common configuration
-try:
-    # Support both direct execution and package imports
+# Support both direct execution and package imports
 import sys
 import os
 
@@ -1004,34 +1003,71 @@ class FastFileAnalyzer:
     ]
     
     @classmethod
-    def categorize_files(cls, files: List[str]) -> Dict[str, List[str]]:
+    def categorize_files(cls, files: List[str], any_structure: bool = False) -> Dict[str, List[str]]:
         """Quickly categorize files by package"""
         packages = defaultdict(list)
         
-        for file in files:
-            if not file:
-                continue
-            
-            # Extract filename from git status
-            clean_file = re.sub(r'^[MADRCU?!]\s+', '', file.strip())
-            
-            # Find package using compiled patterns
-            package = None
-            for pattern, pkg_name in cls.PACKAGE_PATTERNS:
-                if pattern.match(clean_file):
-                    package = pkg_name
-                    break
-            
-            # If no pattern matched, categorize based on location
-            if package is None:
+        if any_structure:
+            # For any repository structure, categorize by directory
+            for file in files:
+                if not file:
+                    continue
+                
+                # Extract filename from git status
+                clean_file = re.sub(r'^[MADRCU?!]\s+', '', file.strip())
+                
+                # Categorize by directory structure
                 if '/' not in clean_file:
                     # Root-level file
                     package = 'root'
                 else:
-                    # Other subdirectory
-                    package = 'other'
-            
-            packages[package].append(clean_file)
+                    # Use first directory as package
+                    parts = clean_file.split('/')
+                    first_dir = parts[0]
+                    
+                    # Special handling for common directories
+                    if first_dir.startswith('.'):
+                        package = 'config'
+                    elif first_dir in ['test', 'tests', 'spec', 'specs']:
+                        package = 'tests'
+                    elif first_dir in ['doc', 'docs', 'documentation']:
+                        package = 'docs'
+                    elif first_dir in ['src', 'lib', 'pkg']:
+                        # For src/lib/pkg, use the second level if available
+                        if len(parts) > 1 and parts[1]:
+                            package = parts[1]
+                        else:
+                            package = first_dir
+                    else:
+                        package = first_dir
+                
+                packages[package].append(clean_file)
+        else:
+            # Original behavior for dart/flutter/rust structure
+            for file in files:
+                if not file:
+                    continue
+                
+                # Extract filename from git status
+                clean_file = re.sub(r'^[MADRCU?!]\s+', '', file.strip())
+                
+                # Find package using compiled patterns
+                package = None
+                for pattern, pkg_name in cls.PACKAGE_PATTERNS:
+                    if pattern.match(clean_file):
+                        package = pkg_name
+                        break
+                
+                # If no pattern matched, categorize based on location
+                if package is None:
+                    if '/' not in clean_file:
+                        # Root-level file
+                        package = 'root'
+                    else:
+                        # Other subdirectory
+                        package = 'other'
+                
+                packages[package].append(clean_file)
         
         return dict(packages)
     
@@ -1101,7 +1137,7 @@ class FastAIAnalyzer:
         self.context_gatherer = EnhancedContextGatherer()
         self.multi_stage = MultiStageAnalyzer(self.model)
     
-    def analyze_quick_mode(self, all_files: List[str]) -> str:
+    def analyze_quick_mode(self, all_files: List[str], any_structure: bool = False) -> str:
         """Single fast AI call for quick mode with enhanced context"""
         print_color(Colors.BLUE, "\nGathering enhanced context...", file=sys.stderr)
         
@@ -1120,7 +1156,7 @@ class FastAIAnalyzer:
         print_color(Colors.BLUE, "Analyzing all changes in quick mode...", file=sys.stderr)
         
         # Categorize files
-        packages = FastFileAnalyzer.categorize_files(all_files)
+        packages = FastFileAnalyzer.categorize_files(all_files, any_structure)
         
         # Build enhanced summary
         changes_summary = []
@@ -1210,7 +1246,8 @@ class FastAIAnalyzer:
                     diff_count += 1
         
         # Create optimized prompt with context
-        prompt = f"""Generate a conventional commit message for these changes in a vector search library.
+        repo_context = "in a vector search library" if not any_structure else ""
+        prompt = f"""Generate a conventional commit message for these changes{' ' + repo_context if repo_context else ''}.
 
 CONTEXT:
 {chr(10).join(context_info)}
@@ -1246,7 +1283,7 @@ IMPORTANT: Output the commit message as plain text. Do NOT wrap it in markdown c
 
         return self._call_gemini(prompt)
     
-    def analyze_package(self, package: str, files: List[str]) -> str:
+    def analyze_package(self, package: str, files: List[str], any_structure: bool = False) -> str:
         """Analyze a single package with enhanced context"""
         if not files:
             return "NO_CHANGES"
@@ -1319,7 +1356,8 @@ IMPORTANT: Output the commit message as plain text. Do NOT wrap it in markdown c
         else:
             package_desc = f"{package} package"
         
-        prompt = f"""Analyze changes in the {package_desc} of a vector search library.
+        repo_context = " of a vector search library" if not any_structure else ""
+        prompt = f"""Analyze changes in the {package_desc}{repo_context}.
 
 Files changed: {len(files)}
 Context:
@@ -1519,6 +1557,7 @@ class FastSmartCommit:
     def __init__(self, args):
         self.args = args
         self.analyzer = FastAIAnalyzer()
+        self.any_structure = args.any
         
         # Configure based on arguments
         if args.max:
@@ -1556,7 +1595,7 @@ class FastSmartCommit:
     
     def run_quick_mode(self, all_files: List[str]) -> str:
         """Run in quick mode with single AI call"""
-        return self.analyzer.analyze_quick_mode(all_files)
+        return self.analyzer.analyze_quick_mode(all_files, self.any_structure)
     
     def run_max_mode(self, all_files: List[str]) -> str:
         """Run in max mode with parallel analysis"""
@@ -1567,7 +1606,7 @@ class FastSmartCommit:
         print_color(Colors.BLUE, "\nCategorizing and analyzing changes...")
         
         # Categorize files
-        packages = FastFileAnalyzer.categorize_files(all_files)
+        packages = FastFileAnalyzer.categorize_files(all_files, self.any_structure)
         
         # Analyze packages in parallel using processes for true parallelism
         analyses = {}
@@ -1578,7 +1617,7 @@ class FastSmartCommit:
             for package, files in packages.items():
                 if files:
                     # Create a new analyzer instance for each process
-                    future = executor.submit(self._analyze_package_worker, package, files)
+                    future = executor.submit(self._analyze_package_worker, package, files, self.any_structure)
                     futures[future] = package
             
             # Collect results
@@ -1606,11 +1645,11 @@ class FastSmartCommit:
         return self.analyzer.generate_final_message('\n'.join(all_analyses))
     
     @staticmethod
-    def _analyze_package_worker(package: str, files: List[str]) -> str:
+    def _analyze_package_worker(package: str, files: List[str], any_structure: bool = False) -> str:
         """Worker function for parallel analysis"""
         # Create a new analyzer instance in the subprocess
         analyzer = FastAIAnalyzer()
-        return analyzer.analyze_package(package, files)
+        return analyzer.analyze_package(package, files, any_structure)
     
     def display_enhanced_metadata(self, metadata: Dict):
         """Display enhanced metadata to user"""
@@ -1847,6 +1886,7 @@ Examples:
   %(prog)s --max              # Comprehensive analysis (15-20s)
   %(prog)s --max --enhanced   # Enhanced multi-stage analysis (20-30s)
   %(prog)s --max --skip-cross # Detailed but skip cross-package analysis
+  %(prog)s --any              # Work with any repository structure
         """
     )
     
@@ -1866,6 +1906,12 @@ Examples:
         '-e', '--enhanced',
         action='store_true',
         help='Enhanced mode with multi-stage analysis, context gathering, and metadata generation'
+    )
+    
+    parser.add_argument(
+        '-a', '--any',
+        action='store_true',
+        help='Work with any repository structure (not just dart/flutter/rust)'
     )
     
     return parser.parse_args()

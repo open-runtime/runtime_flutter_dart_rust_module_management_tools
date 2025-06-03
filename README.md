@@ -1,4 +1,4 @@
-# Runtime Tooling - Multi-Package Repository Management Suite
+# Runtime FDR Package Tools - Multi-Package Repository Management Suite
 
 A comprehensive collection of CLI tools for managing multi-package repositories with AI-powered commit messages, changelog generation, and release automation.
 
@@ -16,14 +16,14 @@ A comprehensive collection of CLI tools for managing multi-package repositories 
 ### From PyPI
 
 ```bash
-pip install runtime-tooling
+pip install runtime-fdr-pkg-tools
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/runtime-tooling.git
-cd runtime-tooling
+git clone https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools.git
+cd runtime_flutter_dart_rust_package_management_tools
 pip install -e .
 ```
 
@@ -31,13 +31,13 @@ pip install -e .
 
 ```bash
 # Install with AI features (OpenAI support)
-pip install runtime-tooling[ai]
+pip install runtime-fdr-pkg-tools[ai]
 
 # Install with development tools
-pip install runtime-tooling[dev]
+pip install runtime-fdr-pkg-tools[dev]
 
 # Install everything
-pip install runtime-tooling[all]
+pip install runtime-fdr-pkg-tools[all]
 ```
 
 ## Quick Start
@@ -205,7 +205,7 @@ rt-changelog --smart-historical
 ### Package Structure
 
 ```
-runtime-tooling/
+runtime-fdr-pkg-tools/
 ├── tooling/
 │   ├── core/           # Core utilities (common_config)
 │   ├── cli/            # CLI command modules
@@ -250,8 +250,8 @@ sync_changelogs.py
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/runtime-tooling.git
-cd runtime-tooling
+git clone https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools.git
+cd runtime_flutter_dart_rust_package_management_tools
 
 # Install in development mode
 pip install -e .[dev]
@@ -308,4 +308,4 @@ Tsavo Knott (2025)
 
 ---
 
-For more detailed documentation, see the [Wiki](https://github.com/yourusername/runtime-tooling/wiki).
+For more detailed documentation, see the [Wiki](https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools/wiki).

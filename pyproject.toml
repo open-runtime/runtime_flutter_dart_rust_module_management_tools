@@ -3,17 +3,17 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "runtime-tooling"
+name = "runtime-fdr-pkg-tools"
 version = "0.1.0"
 description = "A comprehensive suite of CLI tools for managing multi-package repositories"
 readme = "README.md"
 requires-python = ">=3.7"
 license = {text = "MIT"}
 authors = [
-    {name = "Tsavo Knott", email = "your.email@example.com"},
+    {name = "Tsavo Knott", email = "tsavo@pieces.app"},
 ]
 maintainers = [
-    {name = "Tsavo Knott", email = "your.email@example.com"},
+    {name = "Tsavo Knott", email = "tsavo@pieces.app"},
 ]
 keywords = [
     "git",
@@ -43,10 +43,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/runtime-tooling"
-Documentation = "https://github.com/yourusername/runtime-tooling/wiki"
-Repository = "https://github.com/yourusername/runtime-tooling"
-Issues = "https://github.com/yourusername/runtime-tooling/issues"
+Homepage = "https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools"
+Documentation = "https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools/wiki"
+Repository = "https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools"
+Issues = "https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools/issues"
 
 [project.scripts]
 # AI-Powered Commit Tools
