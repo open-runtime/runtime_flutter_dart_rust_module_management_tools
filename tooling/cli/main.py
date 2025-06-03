@@ -21,9 +21,11 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from tooling.core.common_config import Colors, print_color
+    from tooling.core.logging import setup_logging, get_logger
+    from tooling.core.common_config import Colors
 except ImportError:
-    from core.common_config import Colors, print_color
+    from core.logging import setup_logging, get_logger
+    from core.common_config import Colors
 
 # Tool categories and their commands
 TOOL_CATEGORIES = {
@@ -81,7 +83,7 @@ def get_tool_help(module_name: str) -> str:
     return "Help not available"
 
 
-def display_tool_info(alias: str, command: str, module: str, description: str, show_help: bool = False):
+def display_tool_info(alias: str, command: str, module: str, description: str, show_help: bool = False, logger=None):
     """Display information about a tool"""
     # Display basic info
     line = f"  {Colors.GREEN}{alias:<20}{Colors.NC}"
@@ -101,15 +103,15 @@ def display_tool_info(alias: str, command: str, module: str, description: str, s
             for line in help_text.split('\n'):
                 print("    " + line)
         else:
-            print_color(Colors.GRAY, "    No detailed help available")
+            print(f"    {Colors.GRAY}No detailed help available{Colors.NC}")
         print()
 
 
-def display_examples():
+def display_examples(logger):
     """Display common usage examples"""
-    print_color(Colors.PURPLE, "\n" + "=" * 60)
-    print_color(Colors.PURPLE, "Common Usage Examples")
-    print_color(Colors.PURPLE, "=" * 60)
+    print(f"{Colors.PURPLE}\n{'=' * 60}{Colors.NC}")
+    print(f"{Colors.PURPLE}Common Usage Examples{Colors.NC}")
+    print(f"{Colors.PURPLE}{'=' * 60}{Colors.NC}")
     
     examples = [
         ("Daily Development Workflow", [
@@ -152,10 +154,10 @@ def display_examples():
     ]
     
     for title, commands in examples:
-        print_color(Colors.YELLOW, f"\n{title}:")
+        print(f"\n{Colors.YELLOW}{title}:{Colors.NC}")
         for cmd in commands:
             if cmd.startswith("#"):
-                print_color(Colors.GRAY, f"  {cmd}")
+                print(f"  {Colors.GRAY}{cmd}{Colors.NC}")
             elif cmd:
                 print(f"  $ {cmd}")
             else:
@@ -164,6 +166,10 @@ def display_examples():
 
 def main():
     """Main entry point"""
+    # Setup logging
+    logger = setup_logging(tool_name="rfdr-tools")
+    logger.debug("Starting rfdr-tools CLI")
+    
     parser = argparse.ArgumentParser(
         description='Runtime FDR Package Tools - Unified CLI for multi-package repository management',
         formatter_class=argparse.RawDescriptionHelpFormatter,
