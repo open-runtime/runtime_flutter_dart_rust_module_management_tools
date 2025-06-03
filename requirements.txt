@@ -1,0 +1,27 @@
+# Core dependencies
+click>=8.0.0
+colorama>=0.4.4
+requests>=2.25.0
+gitpython>=3.1.0
+pyyaml>=5.4.0
+toml>=0.10.2
+
+# Template engine
+jinja2>=3.0.0
+
+# Async support
+aiohttp>=3.8.0
+aiofiles>=0.8.0
+
+# Graph analysis for dependency tracking
+networkx>=2.6.0
+
+# Visualization
+matplotlib>=3.4.0
+
+# ML for similarity matching
+numpy>=1.21.0
+scikit-learn>=1.0.0
+
+# Optional: OpenAI integration
+# openai>=0.27.0 

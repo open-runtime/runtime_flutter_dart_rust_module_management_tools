@@ -1,0 +1,133 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "runtime-tooling"
+version = "0.1.0"
+description = "A comprehensive suite of CLI tools for managing multi-package repositories"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+authors = [
+    {name = "Tsavo Knott", email = "your.email@example.com"},
+]
+maintainers = [
+    {name = "Tsavo Knott", email = "your.email@example.com"},
+]
+keywords = [
+    "git",
+    "changelog",
+    "release",
+    "automation",
+    "ai",
+    "commit",
+    "version",
+    "multi-package",
+    "monorepo",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Software Development :: Version Control :: Git",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/runtime-tooling"
+Documentation = "https://github.com/yourusername/runtime-tooling/wiki"
+Repository = "https://github.com/yourusername/runtime-tooling"
+Issues = "https://github.com/yourusername/runtime-tooling/issues"
+
+[project.scripts]
+# AI-Powered Commit Tools
+rt-commit = "tooling.cli.smart_commit:main"
+rt-commit-fast = "tooling.cli.smart_commit_fast:main"
+
+# Changelog Management
+rt-changelog = "tooling.cli.sync_changelogs:main"
+rt-changelog-ultra = "tooling.cli.sync_changelog_ultra:main"
+rt-changelog-analyze = "tooling.cli.analyze_changelog_history:main"
+
+# Release Management
+rt-release = "tooling.cli.release:main"
+rt-prepare-patch = "tooling.cli.prepare_new_patch:main"
+rt-push-patch = "tooling.cli.push_new_patch:main"
+rt-retag = "tooling.cli.retag_release:main"
+
+# Version Management
+rt-version = "tooling.cli.update_version:main"
+rt-next-tag = "tooling.cli.get_new_patch_tag:main"
+
+# Validation Tools
+rt-validate = "tooling.cli.validate_changelogs:main"
+rt-prerelease-check = "tooling.cli.pre_release_check:main"
+
+# GitHub Integration
+rt-pr = "tooling.cli.open_pull_request_current_tagged_branch:main"
+rt-release-notes = "tooling.cli.generate_release_notes:main"
+
+# Setup and Configuration
+rt-setup = "tooling.cli.setup_ai_tools:main"
+rt-setup-permissions = "tooling.cli.setup_permissions:main"
+rt-install-gemini = "tooling.cli.install_gemini_cli:main"
+
+# Aliases for common commands
+rtc = "tooling.cli.smart_commit_fast:main"
+rtcl = "tooling.cli.sync_changelogs:main"
+rtr = "tooling.cli.release:main"
+
+[tool.setuptools]
+packages = ["tooling", "tooling.core", "tooling.cli", "tooling.utils", "tooling.tests"]
+
+[tool.setuptools.package-data]
+tooling = ["templates/*.j2", "templates/*.html", "config/*.yaml", "config/*.json"]
+
+[tool.black]
+line-length = 100
+target-version = ['py37', 'py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.7"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers"
+testpaths = [
+    "tests",
+    "tooling/tests",
+]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*" 

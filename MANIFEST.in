@@ -1,0 +1,15 @@
+include README.md
+include LICENSE
+include requirements.txt
+include requirements-dev.txt
+
+# Include all package data
+recursive-include tooling *.py
+recursive-include tooling/templates *.j2 *.html
+recursive-include tooling/config *.yaml *.json
+
+# Exclude compiled files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude __pycache__
+global-exclude .DS_Store 
