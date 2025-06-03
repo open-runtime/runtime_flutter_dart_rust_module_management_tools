@@ -19,12 +19,24 @@ A comprehensive collection of CLI tools for managing multi-package repositories 
 pip install runtime-fdr-pkg-tools
 ```
 
-### From Source
+### From Source (Recommended for Development)
+
+**Important**: On macOS with Homebrew Python or any system with PEP 668 compliance, you must use a virtual environment.
 
 ```bash
+# Clone the repository
 git clone https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools.git
 cd runtime_flutter_dart_rust_package_management_tools
+
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install in development mode
 pip install -e .
+
+# The runtime_fdr_tools command is now available
+runtime_fdr_tools --help
 ```
 
 ### With Optional Dependencies
@@ -40,13 +52,44 @@ pip install runtime-fdr-pkg-tools[dev]
 pip install runtime-fdr-pkg-tools[all]
 ```
 
+### Virtual Environment Setup (Required on macOS/Linux)
+
+Modern Python installations (especially on macOS with Homebrew) require using virtual environments to avoid breaking system packages:
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate it (you'll need to do this each time you work on the project)
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Your prompt should now show (venv)
+# Install the package
+pip install -e .
+
+# When done, deactivate
+deactivate
+```
+
+**Pro tip**: Add an alias to your shell configuration:
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+alias rfdr='cd /path/to/runtime_flutter_dart_rust_package_management_tools && source venv/bin/activate'
+```
+
 ## Quick Start
 
 ### Initial Setup
 
 ```bash
+# View all available tools
+runtime_fdr_tools
+
+# Or get detailed help for all commands
+runtime_fdr_tools --list
+
 # Set up AI tools and API keys
-rt-setup
+runtime_fdr_tools setup_ai_tools
 
 # This will:
 # - Install gemini-cli
@@ -59,70 +102,84 @@ rt-setup
 
 ```bash
 # Generate AI-powered commit message (ultra-fast, 2-3s)
-rtc  # or rt-commit-fast
+runtime_fdr_tools commit  # or runtime_fdr_tools c
 
 # Generate changelog entries
-rtcl  # or rt-changelog
+runtime_fdr_tools sync_changelogs  # or runtime_fdr_tools changelog
 
 # Create a new release
-rtr  # or rt-release
+runtime_fdr_tools release  # or runtime_fdr_tools r
 ```
 
 ## Available Commands
 
+### Main Entry Point
+
+All commands are accessed through the unified `runtime_fdr_tools` command:
+
+```bash
+runtime_fdr_tools <command> [options]
+```
+
+Commands map directly to Python files in the tooling/cli directory.
+
+| Option | Description |
+|---------|-------------|
+| `--list` | Show all available commands with descriptions |
+| `--examples` | Show usage examples |
+
 ### AI-Powered Commit Tools
 
-| Command | Description | Speed |
-|---------|-------------|-------|
-| `rtc` or `rt-commit-fast` | Ultra-fast AI commit messages | 2-3s |
-| `rt-commit-fast --max` | Comprehensive analysis | 15-20s |
-| `rt-commit` | Original detailed analyzer | 30-50s |
+| Command | Aliases | Description | Speed |
+|---------|---------|-------------|-------|
+| `smart_commit_fast` | `commit`, `c` | Ultra-fast AI commit messages | 2-3s |
+| `smart_commit_fast --max` | | Comprehensive analysis | 15-20s |
+| `smart_commit` | `commit_detailed`, `cd` | Original detailed analyzer | 30-50s |
 
 ### Changelog Management
 
-| Command | Description |
-|---------|-------------|
-| `rtcl` or `rt-changelog` | Generate changelog entries with AI |
-| `rt-changelog-ultra` | Ultra-fast changelog sync (experimental) |
-| `rt-changelog-analyze` | Analyze changelog history and patterns |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `sync_changelogs` | `changelog`, `cl` | Generate changelog entries with AI |
+| `analyze_changelog_history` | `analyze` | Analyze changelog history and patterns |
 
 ### Release Management
 
-| Command | Description |
-|---------|-------------|
-| `rtr` or `rt-release` | Complete release workflow |
-| `rt-prepare-patch` | Prepare a new patch version |
-| `rt-push-patch` | Push release and create GitHub release |
-| `rt-retag` | Fix/update an existing release tag |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `release` | `r` | Complete release workflow |
+| `prepare_new_patch` | `prepare` | Prepare a new patch version |
+| `push_new_patch` | `push` | Push release and create GitHub release |
+| `retag_release` | `retag` | Fix/update an existing release tag |
 
 ### Version Management
 
-| Command | Description |
-|---------|-------------|
-| `rt-version` | Update version across all packages |
-| `rt-next-tag` | Calculate next patch version |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `update_version` | `version`, `v` | Update version across all packages |
+| `get_new_patch_tag` | `next` | Calculate next patch version |
 
 ### Validation Tools
 
-| Command | Description |
-|---------|-------------|
-| `rt-validate` | Validate changelog entries |
-| `rt-prerelease-check` | Comprehensive pre-release validation |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `validate_changelogs` | `validate` | Validate changelog entries |
+| `pre_release_check` | `check` | Comprehensive pre-release validation |
 
 ### GitHub Integration
 
-| Command | Description |
-|---------|-------------|
-| `rt-pr` | Create pull request with AI analysis |
-| `rt-release-notes` | Generate release notes |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `open_pull_request_current_tagged_branch` | `pr` | Create pull request with AI analysis |
+| `generate_release_notes` | `notes` | Generate release notes |
 
 ### Setup and Configuration
 
-| Command | Description |
-|---------|-------------|
-| `rt-setup` | Complete AI tools setup |
-| `rt-setup-permissions` | Fix script permissions |
-| `rt-install-gemini` | Install gemini-cli |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `setup_ai_tools` | `setup`, `s` | Complete AI tools setup |
+| `setup_permissions` | `permissions` | Fix script permissions |
+| `install_gemini_cli` | `gemini` | Install gemini-cli |
 
 ## Configuration
 
@@ -170,7 +227,7 @@ your-project/
 git add .
 
 # Generate AI commit message
-rtc
+runtime_fdr_tools commit  # or runtime_fdr_tools c
 
 # Push to branch
 git push
@@ -180,7 +237,7 @@ git push
 
 ```bash
 # Start release process
-rtr
+runtime_fdr_tools release  # or runtime_fdr_tools r
 
 # This will:
 # 1. Check prerequisites
@@ -194,10 +251,10 @@ rtr
 
 ```bash
 # Analyze history
-rt-changelog-analyze
+runtime_fdr_tools analyze_changelog_history
 
 # Generate changelogs for historical commits
-rt-changelog --smart-historical
+runtime_fdr_tools sync_changelogs --smart-historical
 ```
 
 ## Architecture

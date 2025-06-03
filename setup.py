@@ -51,7 +51,7 @@ setup(
     name="runtime-fdr-pkg-tools",
     version="0.1.0",
     author="Tsavo Knott",
-    author_email="your.email@example.com",
+    author_email="tsavo@pieces.app",
     description="A comprehensive suite of CLI tools for managing multi-package repositories",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -77,42 +77,8 @@ setup(
     extras_require=extras_require,
     entry_points={
         "console_scripts": [
-            # AI-Powered Commit Tools
-            "rt-commit=tooling.cli.smart_commit:main",
-            "rt-commit-fast=tooling.cli.smart_commit_fast:main",
-            
-            # Changelog Management
-            "rt-changelog=tooling.cli.sync_changelogs:main",
-            "rt-changelog-ultra=tooling.cli.sync_changelog_ultra:main",
-            "rt-changelog-analyze=tooling.cli.analyze_changelog_history:main",
-            
-            # Release Management
-            "rt-release=tooling.cli.release:main",
-            "rt-prepare-patch=tooling.cli.prepare_new_patch:main",
-            "rt-push-patch=tooling.cli.push_new_patch:main",
-            "rt-retag=tooling.cli.retag_release:main",
-            
-            # Version Management
-            "rt-version=tooling.cli.update_version:main",
-            "rt-next-tag=tooling.cli.get_new_patch_tag:main",
-            
-            # Validation Tools
-            "rt-validate=tooling.cli.validate_changelogs:main",
-            "rt-prerelease-check=tooling.cli.pre_release_check:main",
-            
-            # GitHub Integration
-            "rt-pr=tooling.cli.open_pull_request_current_tagged_branch:main",
-            "rt-release-notes=tooling.cli.generate_release_notes:main",
-            
-            # Setup and Configuration
-            "rt-setup=tooling.cli.setup_ai_tools:main",
-            "rt-setup-permissions=tooling.cli.setup_permissions:main",
-            "rt-install-gemini=tooling.cli.install_gemini_cli:main",
-            
-            # Aliases for common commands
-            "rtc=tooling.cli.smart_commit_fast:main",  # Quick commit
-            "rtcl=tooling.cli.sync_changelogs:main",   # Quick changelog
-            "rtr=tooling.cli.release:main",            # Quick release
+            # Single unified entry point
+            "runtime_fdr_tools=tooling.cli.main_router:main",
         ],
     },
     include_package_data=True,

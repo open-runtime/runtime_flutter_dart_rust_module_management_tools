@@ -9,6 +9,7 @@ Each CLI tool can be run independently:
 
 # List available CLI modules (but don't import them automatically)
 CLI_MODULES = [
+    'main',  # Main entry point
     'smart_commit',
     'smart_commit_fast',
     'sync_changelogs',
