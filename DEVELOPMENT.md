@@ -1,6 +1,6 @@
-# Development Guide for Runtime FDR (Flutter, Dart, Rust) Package Tools
+# Development Guide for Runtime FDR (Flutter, Dart, Rust) Module Tools
 
-This guide covers everything you need to know to develop, test, and contribute to the Runtime FDR (Flutter, Dart, Rust) Package Tools.
+This guide covers everything you need to know to develop, test, and contribute to the Runtime FDR (Flutter, Dart, Rust) Module Tools.
 
 ## Table of Contents
 
@@ -26,8 +26,8 @@ This guide covers everything you need to know to develop, test, and contribute t
 
 ```bash
 # Clone the repository
-git clone https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools.git
-cd runtime_flutter_dart_rust_package_management_tools
+git clone https://github.com/open-runtime/runtime_flutter_dart_rust_module_management_tools.git
+cd runtime_flutter_dart_rust_module_management_tools
 
 # Create virtual environment (REQUIRED on macOS/Linux)
 python3 -m venv venv
@@ -56,11 +56,11 @@ Modern Python installations (PEP 668) require virtual environments to prevent br
 
 ```bash
 # Navigate to project and activate venv
-cd /path/to/runtime_flutter_dart_rust_package_management_tools
+cd /path/to/runtime_flutter_dart_rust_module_management_tools
 source venv/bin/activate
 
 # Your prompt should show (venv)
-(venv) $ runtime_fdr_tools --help
+(venv) $ runtime_fdr_module_tools --help
 
 # When done working
 deactivate
@@ -72,12 +72,12 @@ Add to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
 # Quick activation
-alias rfdr-dev='cd ~/path/to/runtime_flutter_dart_rust_package_management_tools && source venv/bin/activate'
+alias rfdr-dev='cd ~/path/to/runtime_flutter_dart_rust_module_management_tools && source venv/bin/activate'
 
 # Quick commands (if installed globally)
-alias rfdr='runtime_fdr_tools'
-alias rfdrc='runtime_fdr_tools commit'
-alias rfdrr='runtime_fdr_tools release'
+alias rfdr='runtime_fdr_module_tools'
+alias rfdrc='runtime_fdr_module_tools commit'
+alias rfdrr='runtime_fdr_module_tools release'
 ```
 
 ### VS Code Integration
@@ -98,10 +98,10 @@ Create `.vscode/settings.json`:
 
 ### Main Entry Point
 
-All commands are accessed through the unified `runtime_fdr_tools` command:
+All commands are accessed through the unified `runtime_fdr_module_tools` command:
 
 ```bash
-runtime_fdr_tools <command> [options]
+runtime_fdr_module_tools <command> [options]
 ```
 
 ### Command Discovery
@@ -112,24 +112,24 @@ Commands are automatically discovered from Python files in `tooling/cli/`. The c
 
 ```bash
 # View all available commands
-runtime_fdr_tools
+runtime_fdr_module_tools
 
 # Get detailed help
-runtime_fdr_tools --list
+runtime_fdr_module_tools --list
 
 # Show usage examples
-runtime_fdr_tools --examples
+runtime_fdr_module_tools --examples
 
 # Show help for all commands at once
-runtime_fdr_tools --help-all
+runtime_fdr_module_tools --help-all
 
 # Run a specific command
-runtime_fdr_tools smart_commit_fast
-runtime_fdr_tools validate_changelogs --help
+runtime_fdr_module_tools smart_commit_fast
+runtime_fdr_module_tools validate_changelogs --help
 
 # Use aliases
-runtime_fdr_tools commit  # Alias for smart_commit_fast
-runtime_fdr_tools c       # Short alias
+runtime_fdr_module_tools commit  # Alias for smart_commit_fast
+runtime_fdr_module_tools c       # Short alias
 ```
 
 ## Testing Commands
@@ -154,14 +154,14 @@ After `pip install -e .`:
 
 ```bash
 # Commands are available globally in the venv
-runtime_fdr_tools commit
-runtime_fdr_tools release
+runtime_fdr_module_tools commit
+runtime_fdr_module_tools release
 ```
 
 ## Project Structure
 
 ```
-runtime_flutter_dart_rust_package_management_tools/
+runtime_flutter_dart_rust_module_management_tools/
 ├── tooling/
 │   ├── cli/                    # All CLI commands
 │   │   ├── main_router.py      # Unified entry point
@@ -238,7 +238,7 @@ python tooling/cli/main_router.py my_new_command --help
 
 # After reinstalling
 pip install -e .
-runtime_fdr_tools my_new_command --help
+runtime_fdr_module_tools my_new_command --help
 ```
 
 ### 3. Add Alias (Optional)
@@ -304,7 +304,7 @@ if args.verbose:
 
 ```bash
 # Generate command list
-runtime_fdr_tools --list > COMMANDS.md
+runtime_fdr_module_tools --list > COMMANDS.md
 
 # Update README sections
 # (Currently manual, could be automated)
@@ -314,7 +314,7 @@ runtime_fdr_tools --list > COMMANDS.md
 
 ### Common Issues
 
-#### 1. "command not found: runtime_fdr_tools"
+#### 1. "command not found: runtime_fdr_module_tools"
 
 ```bash
 # Ensure virtual environment is activated
@@ -324,14 +324,14 @@ source venv/bin/activate
 pip install -e .
 
 # Check installation
-which runtime_fdr_tools
+which runtime_fdr_module_tools
 ```
 
 #### 2. Import Errors
 
 ```bash
 # Ensure you're in the project root
-pwd  # Should show .../runtime_flutter_dart_rust_package_management_tools
+pwd  # Should show .../runtime_flutter_dart_rust_module_management_tools
 
 # Reinstall dependencies
 pip install -e ".[dev]"
@@ -354,13 +354,13 @@ pip install -e .
 echo $GEMINI_API_KEY
 
 # Run setup
-runtime_fdr_tools setup_ai_tools
+runtime_fdr_module_tools setup_ai_tools
 ```
 
 ### Development Tips
 
 1. **Always use virtual environment** - It's not optional on modern systems
-2. **Test commands both ways** - Direct Python and through `runtime_fdr_tools`
+2. **Test commands both ways** - Direct Python and through `runtime_fdr_module_tools`
 3. **Follow existing patterns** - Look at existing commands for examples
 4. **Use common_config.py** - Don't duplicate functionality
 5. **Add helpful error messages** - Users appreciate clear guidance
@@ -390,7 +390,7 @@ When you're ready to release:
 2. Create feature branch (`git checkout -b feature/amazing-feature`)
 3. Make changes following the patterns above
 4. Test thoroughly
-5. Commit with meaningful messages (use `runtime_fdr_tools commit`!)
+5. Commit with meaningful messages (use `runtime_fdr_module_tools commit`!)
 6. Push and create Pull Request
 
 Remember: This project eats its own dog food - use the tools to develop the tools! 

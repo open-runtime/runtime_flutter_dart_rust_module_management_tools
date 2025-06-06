@@ -53,6 +53,10 @@ tabulate>=0.9.0       # Table formatting
 humanize>=4.9.0       # Human-readable output
 tenacity>=8.2.3       # Retry logic
 
+# GitHub integration
+PyGithub>=2.1.1       # GitHub API client
+questionary>=2.0.1    # Interactive prompts for CLI
+
 # =============================================================================
 # Keep existing dependencies
 # =============================================================================

@@ -1,0 +1,91 @@
+# Runtime Tools Configuration
+# This file contains default settings for all runtime tools
+
+# UI Configuration
+ui:
+  theme: dark                    # UI theme: dark, light, auto
+  use_emoji: true               # Show emoji in output
+  progress_style: rainbow       # Progress bar style: rainbow, blue, green
+  table_style: rounded          # Table borders: rounded, double, ascii
+  use_color: true              # Enable colored output
+  interactive_by_default: false # Launch interactive mode by default
+
+# AI Configuration  
+ai:
+  provider: gemini              # AI provider: gemini, openai
+  model: gemini-2.0-flash      # Default model
+  pro_model: gemini-2.0-flash  # Pro model for complex tasks
+  timeout: 60                   # API timeout in seconds
+  max_retries: 3               # Max retry attempts
+  cache_responses: true         # Cache AI responses
+  cache_ttl: 3600              # Cache TTL in seconds
+
+# Git Configuration
+git:
+  auto_stage: false            # Auto-stage files before commit
+  push_after_commit: false     # Auto-push after commit
+  sign_commits: false          # GPG sign commits
+  default_branch: main         # Default branch name
+
+# Release Configuration
+release:
+  create_github_release: true   # Create GitHub release
+  generate_release_notes: true  # Generate release notes
+  draft_by_default: false      # Create draft releases
+  prerelease_pattern: "-rc"    # Pattern for prereleases
+
+# Changelog Configuration
+changelog:
+  include_author: true         # Include author in entries
+  include_pr_links: true       # Include PR links
+  group_by_type: true          # Group by conventional type
+  exclude_patterns:            # Patterns to exclude
+    - "^chore:"
+    - "^docs:"
+    - "^test:"
+
+# Development Configuration
+development:
+  debug: false                 # Debug mode
+  dry_run: false              # Dry run mode
+  verbose: false              # Verbose output
+  log_level: INFO             # Log level: DEBUG, INFO, WARNING, ERROR
+  log_file: null              # Log file path (null for no file)
+
+# Performance Configuration
+performance:
+  max_workers: 4              # Max parallel workers
+  batch_size: 10              # Batch size for operations
+  connection_pool_size: 5     # Git connection pool size
+  enable_profiling: false     # Enable performance profiling
+
+# Notifications
+notifications:
+  slack:
+    enabled: false
+    webhook_url: null
+    channel: "#releases"
+  discord:
+    enabled: false
+    webhook_url: null
+  email:
+    enabled: false
+    smtp_server: null
+    from_address: null
+    to_addresses: []
+
+# Custom Commands
+custom_commands:
+  # Add your custom commands here
+  # example:
+  #   description: "Example custom command"
+  #   command: "echo 'Hello from custom command!'"
+
+# Project-specific overrides
+projects:
+  # Override settings for specific projects
+  # example_project:
+  #   git:
+  #     default_branch: develop
+  #   release:
+  #     prerelease_pattern: "-beta" 

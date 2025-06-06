@@ -22,7 +22,7 @@ from rich.logging import RichHandler
 from rich.traceback import install as install_rich_traceback
 
 # Import our config module
-from .config import BaseToolConfig, load_config
+from .base_config import ToolingConfig as BaseToolConfig, get_config as load_config
 
 
 def setup_logging(
@@ -53,13 +53,12 @@ def setup_logging(
     
     # Override with provided values
     if level == "INFO" and config.log_level:
-        level = config.log_level
-    if not json_output and config.json_output:
-        json_output = config.json_output
+        level = config.log_level.value if hasattr(config.log_level, 'value') else str(config.log_level)
+    # Note: json_output is passed as parameter, not from config
     
     # Install rich traceback for better error display
     if install_traceback and not json_output:
-        install_rich_traceback(show_locals=config.debug)
+        install_rich_traceback(show_locals=getattr(config, 'debug', False))
     
     # Configure standard logging first
     logging.basicConfig(
@@ -86,9 +85,9 @@ def setup_logging(
         handler = RichHandler(
             console=console,
             show_time=True,
-            show_path=config.debug,
+            show_path=getattr(config, 'debug', False),
             rich_tracebacks=True,
-            tracebacks_show_locals=config.debug,
+            tracebacks_show_locals=getattr(config, 'debug', False),
             markup=True,
             enable_link_path=True
         )
@@ -138,7 +137,7 @@ def setup_logging(
         # Console rendering with color
         renderer = structlog.dev.ConsoleRenderer(
             colors=config.use_color,
-            exception_formatter=structlog.dev.rich_traceback if config.debug else None
+            exception_formatter=structlog.dev.rich_traceback if getattr(config, 'debug', False) else None
         )
     
     structlog.configure(
@@ -172,7 +171,7 @@ def setup_logging(
         json_output=json_output,
         log_file=str(log_file) if log_file else None,
         tool_name=tool_name,
-        debug_mode=config.debug
+        debug_mode=getattr(config, 'debug', False)
     )
     
     return logger

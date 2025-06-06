@@ -1,0 +1,493 @@
+name: Reusable Python Tooling Build
+
+on:
+  workflow_call:
+    inputs:
+      matrix-config:
+        description: 'The Matrix as a JSON String to be used for the Matrix Strategy'
+        required: true
+        type: string
+      version:
+        description: 'The version tag (e.g., v1.2.3) used for GCS paths and potentially naming'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write  # Required for Google Cloud authentication
+
+concurrency:
+  group: ${{ inputs.version }}-${{ fromJSON(inputs.matrix-config).name }}
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GCP_PROJECT_ID: 'global-cloud-runtime'
+  VERSION: ${{ inputs.version }}
+  GCS_BASE_PATH: 'open-runtime-ci-cd-dynamic-libraries/runtime_fdr_pkg_tools'
+  PACKAGE_NAME: 'runtime-fdr-pkg-tools'
+  PYTHON_PACKAGE_NAME: 'runtime_fdr_pkg_tools'
+  CLI_BINARY_NAME: 'runtime-fdr-pkg-tools'
+
+jobs:
+  compose:
+    name: ${{ matrix.config.name }} Build
+    runs-on: ${{ matrix.config.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - ${{ fromJSON(inputs.matrix-config) }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false  # Disable LFS since we don't need it
+          fetch-depth: 0
+          persist-credentials: true
+          clean: true
+          submodules: false
+
+      - name: Setup Git
+        run: |
+          # Configure Git to use the token for authentication (using only URL rewrite method)
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+          echo "Git configured successfully"
+
+      - name: Debug Version and Matrix Information
+        run: |
+          echo "============= VERSION INFORMATION ============="
+          echo "Input version: ${{ inputs.version }}"
+          echo "Environment VERSION: ${{ env.VERSION }}"
+          echo "Platform: ${{ matrix.config.name }}"
+          echo "OS Family: ${{ matrix.config.system_information.operating_system_family }}"
+          echo "Architecture: ${{ matrix.config.system_information.kernel_architecture }}"
+          echo "GCS Base Path: gs://${{ env.GCS_BASE_PATH }}"
+          echo "GCS Full Path: gs://${{ env.GCS_BASE_PATH }}/${{ env.VERSION }}/${{ matrix.config.refined_matrix }}"
+          echo "=============================================="
+        shell: bash
+
+      - name: Echo Input Matrix Config (for debugging)
+        run: |
+          echo "Received matrix-config input:"
+          echo '${{ inputs.matrix-config }}' | jq .
+        shell: bash
+
+      - name: Verify Version Consistency
+        run: |
+          echo "🔍 Verifying version consistency across project files..."
+          TAG_VERSION="${{ inputs.version }}"
+          
+          # For non-version tag runs (PRs, merges, etc.), get the latest tag instead
+          if [[ "$TAG_VERSION" == *"/"* ]] || [[ "$TAG_VERSION" != v* ]]; then
+            echo "⚠️ Not a version tag release ($TAG_VERSION). Fetching latest tag for verification..."
+            # Git is already configured to use the token from the Setup Git step
+            git fetch --tags
+            LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null || echo "v0.0.0")
+            TAG_VERSION="$LATEST_TAG"
+            echo "Using latest tag: $TAG_VERSION for version verification"
+          fi
+          
+          # Remove 'v' prefix if present for comparison
+          CLEAN_VERSION=$(echo "$TAG_VERSION" | sed 's/^v//')
+          echo "Tag version: $TAG_VERSION (cleaned: $CLEAN_VERSION)"
+          
+          # Check Python pyproject.toml
+          if [ -f "pyproject.toml" ]; then
+            PYTHON_VERSION=$(grep -E '^version = ' pyproject.toml | head -1 | cut -d'"' -f2 || echo "Not found")
+            echo "pyproject.toml version: $PYTHON_VERSION"
+            
+            if [ "$PYTHON_VERSION" != "$CLEAN_VERSION" ]; then
+              echo "❌ Error: Version mismatch in pyproject.toml ($PYTHON_VERSION) vs tag ($CLEAN_VERSION)"
+              if [[ "${{ inputs.version }}" == *"/"* ]] || [[ "${{ inputs.version }}" != v* ]]; then
+                echo "⚠️ This is not a version tag release. Continuing despite version mismatch."
+              else
+                # Only fail the workflow if this is a version tag release
+                exit 1
+              fi
+            else
+              echo "✅ pyproject.toml version matches tag"
+            fi
+          else
+            echo "⚠️ Warning: pyproject.toml not found, skipping check"
+          fi
+          
+          if [[ "${{ inputs.version }}" == *"/"* ]] || [[ "${{ inputs.version }}" != v* ]]; then
+            echo "ℹ️ Version verification completed - reporting only (not a version tag release)"
+          else
+            echo "✅ All version checks passed - build version matches source files"
+          fi
+        shell: bash
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Decode GCP Credentials (Windows)
+        if: matrix.config.system_information.operating_system_family == 'windows'
+        id: decoded_gcp_json_windows
+        shell: pwsh 
+        run: |
+          # Secret location: https://github.com/organizations/open-runtime/settings/secrets/actions
+          # GCP Service Account: https://console.cloud.google.com/iam-admin/serviceaccounts/details/102629869278480058286?project=global-cloud-runtime
+          $base64String = "${{ secrets._GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 }}"
+          if ([string]::IsNullOrEmpty($base64String)) {
+            Write-Error "Error: _GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 secret is not set"
+            exit 1
+          }
+          
+          try {
+            $decodedBytes = [System.Convert]::FromBase64String($base64String)
+            $decodedJsonString = [System.Text.Encoding]::UTF8.GetString($decodedBytes)
+            
+            # Parse and re-serialize the JSON to ensure it's valid
+            $jsonObject = $decodedJsonString | ConvertFrom-Json
+            $compactJson = $jsonObject | ConvertTo-Json -Compress -Depth 100
+            $finalOutput = $compactJson.Trim()
+            
+            # Output the processed JSON string
+            echo "decoded=$finalOutput" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } catch {
+            Write-Error "Error processing GCP credentials: $_"
+            exit 1
+          }
+
+      - name: Decode GCP Credentials (Linux/macOS)
+        if: matrix.config.system_information.operating_system_family != 'windows'
+        id: decoded_gcp_json_unix
+        run: |
+          # Secret location: https://github.com/organizations/open-runtime/settings/secrets/actions
+          # GCP Service Account: https://console.cloud.google.com/iam-admin/serviceaccounts/details/102629869278480058286?project=global-cloud-runtime
+          if [[ -z "${{ secrets._GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 }}" ]]; then
+            echo "Error: _GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 secret is not set"
+            exit 1
+          fi
+          
+          # Decode and validate the JSON
+          DECODED_JSON=$(echo '${{ secrets._GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 }}' | base64 --decode)
+          if ! echo "$DECODED_JSON" | jq . > /dev/null 2>&1; then
+            echo "Error: Decoded credentials are not valid JSON"
+            exit 1
+          fi
+          
+          # Output the compact JSON
+          echo "decoded=$(echo "$DECODED_JSON" | jq -c .)" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2.1.3
+        id: gcp-auth
+        with:
+          # Use the output from the step that actually ran, based on the target OS family
+          credentials_json: ${{ matrix.config.system_information.operating_system_family == 'windows' && steps.decoded_gcp_json_windows.outputs.decoded || steps.decoded_gcp_json_unix.outputs.decoded }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          create_credentials_file: true
+
+      - name: Set up gcloud Cloud SDK environment
+        uses: google-github-actions/setup-gcloud@v2.1.0
+        with:
+          version: '>= 424.0.0'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install pyinstaller>=5.0
+          pip install -e .
+
+      - name: Install CLI Tools
+        shell: bash
+        run: |
+          echo "Installing Claude Code and Codex CLI tools..."
+          npm install -g @anthropic-ai/claude-cli
+          npm install -g @openai/codex-cli
+          echo "✅ CLI tools installed successfully"
+
+      - name: Build Python Package
+        run: |
+          python -m build
+
+      - name: Build Standalone CLI Binary
+        run: |
+          echo "Building standalone CLI binary for ${{ matrix.config.name }}..."
+          pyinstaller --onefile --name ${{ env.CLI_BINARY_NAME }} tooling/cli/main.py
+          
+          # Verify the binary was created
+          if [[ "${{ matrix.config.system_information.operating_system_family }}" == "windows" ]]; then
+            [[ -f dist/${{ env.CLI_BINARY_NAME }}.exe ]] || { echo "Error: Windows binary not created"; exit 1; }
+          else
+            [[ -f dist/${{ env.CLI_BINARY_NAME }} ]] || { echo "Error: Binary not created"; exit 1; }
+          fi
+          echo "✅ Binary created successfully"
+
+      - name: Run Python Tests
+        run: |
+          python -m pytest tooling/tests/ -v --tb=short
+
+      - name: Run Changelog Validation (PR Only)
+        if: contains(inputs.version, 'PR-')
+        shell: bash
+        run: |
+          echo "🔍 Running changelog validation for PR build..."
+          echo ""
+          
+          # Check if validation scripts exist
+          if [[ -f "tooling/validate_changelogs.py" ]]; then
+            echo "📋 Running changelog validation..."
+            if python3 tooling/validate_changelogs.py; then
+              echo "✅ Changelog validation passed"
+            else
+              echo "⚠️  Changelog validation found issues (non-blocking for PR)"
+              echo "   This is informational - fix these before creating a release"
+              echo ""
+              echo "   To run locally:"
+              echo "   python3 tooling/validate_changelogs.py"
+            fi
+          else
+            echo "ℹ️  Changelog validation script not found"
+            echo "   This is expected if the PR doesn't include the tooling updates"
+          fi
+          
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "ℹ️  Note: Validation is informational for PRs"
+          echo "   Full validation happens during releases"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Create Output Directory
+        run: |
+          mkdir -p cli_binaries
+          mkdir -p cli_binaries/macos_arm64
+          mkdir -p cli_binaries/macos_x64
+          mkdir -p cli_binaries/linux_x64
+          mkdir -p cli_binaries/windows_x64
+          mkdir -p python_packages
+
+      # --- Platform Specific Packaging and Upload --- 
+
+      - name: Package and Upload - macOS (Apple Silicon)
+        if: matrix.config.system_information.operating_system_family == 'macos' && matrix.config.system_information.kernel_architecture == 'arm64'
+        run: |
+          echo "Packaging for macOS ARM..."
+          # Copy CLI binary
+          cp dist/${{ env.CLI_BINARY_NAME }} cli_binaries/macos_arm64/
+          
+          # Copy Python packages
+          cp dist/*.whl dist/*.tar.gz python_packages/ || true
+          
+          # Verify files exist locally before zipping
+          [[ -f cli_binaries/macos_arm64/${{ env.CLI_BINARY_NAME }} ]] || { echo "Error: macOS ARM binary not found locally"; exit 1; }
+          
+          cd cli_binaries/macos_arm64
+          zip -r ../../${{ env.CLI_BINARY_NAME }}_macos_arm64.zip ${{ env.CLI_BINARY_NAME }}
+          cd ../..
+          
+          # Verify zip file was created
+          [[ -f ${{ env.CLI_BINARY_NAME }}_macos_arm64.zip ]] || { echo "Error: Failed to create macOS ARM ZIP archive"; exit 1; }
+          
+          echo "Uploading macOS ARM bundle to GCS..."
+          GCS_DEST="gs://${{ env.GCS_BASE_PATH }}/${{ env.VERSION }}/macos_arm64"
+          
+          # Upload files without ignoring errors
+          gcloud storage cp ${{ env.CLI_BINARY_NAME }}_macos_arm64.zip "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.zip"
+          gcloud storage cp cli_binaries/macos_arm64/${{ env.CLI_BINARY_NAME }} "$GCS_DEST/"
+          
+          # Verify files were uploaded correctly
+          gsutil -q stat "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.zip" || { echo "Error: macOS ARM ZIP not uploaded"; exit 1; }
+          gsutil -q stat "$GCS_DEST/${{ env.CLI_BINARY_NAME }}" || { echo "Error: macOS ARM binary not uploaded"; exit 1; }
+          
+          echo "✅ Uploaded macOS ARM artifacts - All files verified"
+
+      - name: Package and Upload - macOS (Intel)
+        if: matrix.config.system_information.operating_system_family == 'macos' && matrix.config.system_information.kernel_architecture == 'x86_64'
+        run: |
+          echo "Packaging for macOS Intel..."
+          # Copy CLI binary
+          cp dist/${{ env.CLI_BINARY_NAME }} cli_binaries/macos_x64/
+          
+          # Verify files exist locally before zipping
+          [[ -f cli_binaries/macos_x64/${{ env.CLI_BINARY_NAME }} ]] || { echo "Error: macOS Intel binary not found locally"; exit 1; }
+          
+          cd cli_binaries/macos_x64
+          zip -r ../../${{ env.CLI_BINARY_NAME }}_macos_x64.zip ${{ env.CLI_BINARY_NAME }}
+          cd ../..
+          
+          # Verify zip file was created
+          [[ -f ${{ env.CLI_BINARY_NAME }}_macos_x64.zip ]] || { echo "Error: Failed to create macOS Intel ZIP archive"; exit 1; }
+          
+          echo "Uploading macOS Intel bundle to GCS..."
+          GCS_DEST="gs://${{ env.GCS_BASE_PATH }}/${{ env.VERSION }}/macos_x64"
+          
+          # Upload files without ignoring errors
+          gcloud storage cp ${{ env.CLI_BINARY_NAME }}_macos_x64.zip "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.zip"
+          gcloud storage cp cli_binaries/macos_x64/${{ env.CLI_BINARY_NAME }} "$GCS_DEST/"
+          
+          # Verify files were uploaded correctly
+          gsutil -q stat "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.zip" || { echo "Error: macOS Intel ZIP not uploaded"; exit 1; }
+          gsutil -q stat "$GCS_DEST/${{ env.CLI_BINARY_NAME }}" || { echo "Error: macOS Intel binary not uploaded"; exit 1; }
+          
+          echo "✅ Uploaded macOS Intel artifacts - All files verified"
+
+      - name: Package and Upload - Linux
+        if: matrix.config.system_information.operating_system_family == 'linux'
+        run: |
+          echo "Packaging for Linux..."
+          # Copy CLI binary
+          cp dist/${{ env.CLI_BINARY_NAME }} cli_binaries/linux_x64/
+          
+          # Copy Python packages (only once, on Linux)
+          cp dist/*.whl dist/*.tar.gz python_packages/ || true
+          
+          # Verify files exist locally before packaging
+          [[ -f cli_binaries/linux_x64/${{ env.CLI_BINARY_NAME }} ]] || { echo "Error: Linux binary not found locally"; exit 1; }
+          
+          cd cli_binaries/linux_x64
+          tar -czf ../../${{ env.CLI_BINARY_NAME }}_linux_x64.tar.gz ${{ env.CLI_BINARY_NAME }}
+          cd ../..
+          
+          # Verify archive was created
+          [[ -f ${{ env.CLI_BINARY_NAME }}_linux_x64.tar.gz ]] || { echo "Error: Failed to create Linux tar.gz archive"; exit 1; }
+          
+          echo "Uploading Linux bundle to GCS..."
+          GCS_DEST="gs://${{ env.GCS_BASE_PATH }}/${{ env.VERSION }}/linux_x64"
+          
+          # Upload files without ignoring errors
+          gcloud storage cp ${{ env.CLI_BINARY_NAME }}_linux_x64.tar.gz "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.tar.gz"
+          gcloud storage cp cli_binaries/linux_x64/${{ env.CLI_BINARY_NAME }} "$GCS_DEST/"
+          
+          # Upload Python packages
+          GCS_PYTHON_DEST="gs://${{ env.GCS_BASE_PATH }}/${{ env.VERSION }}/python"
+          if ls python_packages/*.whl 1> /dev/null 2>&1; then
+            gcloud storage cp python_packages/*.whl "$GCS_PYTHON_DEST/"
+          fi
+          if ls python_packages/*.tar.gz 1> /dev/null 2>&1; then
+            gcloud storage cp python_packages/*.tar.gz "$GCS_PYTHON_DEST/"
+          fi
+          
+          # Verify files were uploaded correctly
+          gsutil -q stat "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.tar.gz" || { echo "Error: Linux tar.gz not uploaded"; exit 1; }
+          gsutil -q stat "$GCS_DEST/${{ env.CLI_BINARY_NAME }}" || { echo "Error: Linux binary not uploaded"; exit 1; }
+          
+          echo "✅ Uploaded Linux artifacts - All files verified"
+
+      - name: Package and Upload - Windows
+        if: matrix.config.system_information.operating_system_family == 'windows'
+        shell: pwsh # Use PowerShell for Windows commands
+        run: |
+          Write-Host "Packaging for Windows..."
+          # Copy CLI binary
+          Copy-Item "dist/${{ env.CLI_BINARY_NAME }}.exe" "cli_binaries/windows_x64/"
+          
+          # Verify files exist locally before zipping
+          if (-Not (Test-Path "cli_binaries/windows_x64/${{ env.CLI_BINARY_NAME }}.exe")) {
+            Write-Error "Error: Windows exe not found locally"
+            exit 1
+          }
+          
+          Compress-Archive -Path cli_binaries/windows_x64/${{ env.CLI_BINARY_NAME }}.exe -DestinationPath ${{ env.CLI_BINARY_NAME }}_windows_x64.zip
+          
+          # Verify zip file was created
+          if (-Not (Test-Path "${{ env.CLI_BINARY_NAME }}_windows_x64.zip")) {
+            Write-Error "Error: Failed to create Windows ZIP archive"
+            exit 1
+          }
+          
+          Write-Host "Uploading Windows bundle to GCS..."
+          $GCS_DEST = "gs://${{ env.GCS_BASE_PATH }}/${{ env.VERSION }}/windows_x64"
+          
+          # Upload files without ignoring errors
+          gcloud storage cp ${{ env.CLI_BINARY_NAME }}_windows_x64.zip "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.zip"
+          gcloud storage cp cli_binaries/windows_x64/${{ env.CLI_BINARY_NAME }}.exe "$GCS_DEST/"
+          
+          # Verify files were uploaded correctly
+          gsutil -q stat "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.zip" || { Write-Error "Error: Windows ZIP not uploaded"; exit 1 }
+          gsutil -q stat "$GCS_DEST/${{ env.CLI_BINARY_NAME }}.exe" || { Write-Error "Error: Windows exe not uploaded"; exit 1 }
+          
+          Write-Host "✅ Uploaded Windows artifacts - All files verified"
+
+      # --- Verification Step: Download from GCS and Re-test ---
+      - name: Verify Uploaded Artifacts (Unix - macOS/Linux)
+        if: matrix.config.system_information.operating_system_family != 'windows'
+        run: |
+          echo "🧪 Verifying artifacts by downloading and re-testing..."
+          PLATFORM=""
+          BINARY_NAME="${{ env.CLI_BINARY_NAME }}"
+
+          # Determine platform based on matrix config
+          if [[ "${{ matrix.config.system_information.operating_system_family }}" == "macos" ]]; then
+            if [[ "${{ matrix.config.system_information.kernel_architecture }}" == "arm64" ]]; then
+              PLATFORM="macos_arm64"
+            elif [[ "${{ matrix.config.system_information.kernel_architecture }}" == "x86_64" ]]; then
+              PLATFORM="macos_x64"
+            fi
+          elif [[ "${{ matrix.config.system_information.operating_system_family }}" == "linux" ]]; then
+            PLATFORM="linux_x64"
+          fi
+
+          if [[ -z "$PLATFORM" ]]; then
+            echo "❌ Error: Could not determine platform for verification."
+            exit 1
+          fi
+
+          GCS_SOURCE_DIR="gs://${{ env.GCS_BASE_PATH }}/${{ env.VERSION }}/${PLATFORM}"
+          
+          echo "Cleaning test directory..."
+          rm -rf test_download
+          mkdir -p test_download
+          cd test_download
+
+          echo "Downloading from GCS path: $GCS_SOURCE_DIR"
+          gcloud storage cp "$GCS_SOURCE_DIR/$BINARY_NAME" .
+          
+          if [[ ! -f "$BINARY_NAME" ]]; then
+            echo "❌ Error: Binary not found after download"
+            exit 1
+          fi
+          
+          chmod +x "$BINARY_NAME"
+          
+          echo "Testing downloaded binary..."
+          ./$BINARY_NAME --version
+          ./$BINARY_NAME --help
+          
+          cd ..
+          echo "✅ Verification successful: Binary works correctly"
+
+      - name: Verify Uploaded Artifacts (Windows)
+        if: matrix.config.system_information.operating_system_family == 'windows'
+        shell: pwsh
+        run: |
+          Write-Host "🧪 Verifying artifacts by downloading and re-testing..."
+          $PLATFORM = "windows_x64"
+          $BINARY_NAME = "${{ env.CLI_BINARY_NAME }}.exe"
+          $GCS_SOURCE_DIR = "gs://${{ env.GCS_BASE_PATH }}/${{ env.VERSION }}/${PLATFORM}"
+
+          Write-Host "Cleaning test directory..."
+          if (Test-Path test_download) {
+            Remove-Item -Path test_download -Recurse -Force
+          }
+          New-Item -Path test_download -ItemType Directory -Force | Out-Null
+          Set-Location test_download
+
+          Write-Host "Downloading from GCS path: $GCS_SOURCE_DIR"
+          gcloud storage cp "$GCS_SOURCE_DIR/$BINARY_NAME" .
+          
+          if (-Not (Test-Path "$BINARY_NAME")) {
+            Write-Error "❌ Error: Binary not found after download"
+            exit 1
+          }
+
+          Write-Host "Testing downloaded binary..."
+          & ".\$BINARY_NAME" --version
+          & ".\$BINARY_NAME" --help
+          
+          Set-Location ..
+          Write-Host "✅ Verification successful: Binary works correctly"
+

@@ -3,12 +3,33 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "runtime-fdr-pkg-tools"
+name = "runtime-fdr-module-tools"
 version = "0.1.0"
 description = "A comprehensive suite of CLI tools for managing multi-package repositories"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 license = {text = "MIT"}
+dependencies = [
+    "click>=8.1.7",
+    "rich>=13.7.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "structlog>=24.1.0",
+    "GitPython>=3.1.40",
+    "aiohttp>=3.9.0",
+    "jinja2>=3.1.2",
+    "pyyaml>=5.4.0",
+    "toml>=0.10.2",
+    "semver>=3.0.2",
+    "tabulate>=0.9.0",
+    "humanize>=4.9.0",
+    "tenacity>=8.2.3",
+    "colorama>=0.4.4",
+    "requests>=2.25.0",
+    "PyGithub>=2.1.1",
+    "questionary>=2.0.1",
+]
 authors = [
     {name = "Tsavo Knott", email = "tsavo@pieces.app"},
 ]
@@ -33,24 +54,24 @@ classifiers = [
     "Topic :: Software Development :: Version Control :: Git",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
 
 [project.urls]
-Homepage = "https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools"
-Documentation = "https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools/wiki"
-Repository = "https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools"
-Issues = "https://github.com/open-runtime/runtime_flutter_dart_rust_package_management_tools/issues"
+Homepage = "https://github.com/open-runtime/runtime_flutter_dart_rust_module_management_tools"
+Documentation = "https://github.com/open-runtime/runtime_flutter_dart_rust_module_management_tools/wiki"
+Repository = "https://github.com/open-runtime/runtime_flutter_dart_rust_module_management_tools"
+Issues = "https://github.com/open-runtime/runtime_flutter_dart_rust_module_management_tools/issues"
 
 [project.scripts]
 # Single unified entry point
-runtime_fdr_tools = "tooling.cli.main_router:main"
+runtime_fdr_module_tools = "tooling.rt:cli"
 
 [tool.setuptools]
 packages = ["tooling", "tooling.core", "tooling.cli", "tooling.utils", "tooling.tests"]
@@ -81,7 +102,7 @@ profile = "black"
 line_length = 100
 
 [tool.mypy]
-python_version = "3.7"
+python_version = "3.8"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
@@ -96,4 +117,27 @@ testpaths = [
 ]
 python_files = "test_*.py"
 python_classes = "Test*"
-python_functions = "test_*" 
+python_functions = "test_*"
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "N",  # pep8-naming
+    "UP", # pyupgrade
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501", # line too long (handled by black)
+    "B008", # do not perform function calls in argument defaults
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]  # unused import
+"tests/**" = ["S101"]  # assert used 

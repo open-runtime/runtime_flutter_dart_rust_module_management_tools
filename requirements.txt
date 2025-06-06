@@ -1,9 +1,9 @@
 # Core dependencies
-click>=8.0.0
+click>=8.1.0
 colorama>=0.4.4
 requests>=2.25.0
 gitpython>=3.1.0
-pyyaml>=5.4.0
+pyyaml>=6.0
 toml>=0.10.2
 
 # Template engine
@@ -11,7 +11,7 @@ jinja2>=3.0.0
 
 # Async support
 aiohttp>=3.8.0
-aiofiles>=0.8.0
+aiofiles>=23.0.0
 
 # Graph analysis for dependency tracking
 networkx>=2.6.0
@@ -23,5 +23,79 @@ matplotlib>=3.4.0
 numpy>=1.21.0
 scikit-learn>=1.0.0
 
+# Google Gemini SDK
+google-genai>=0.1.0
+
+# Enhanced CLI features
+rich>=13.0.0
+pydantic>=2.0.0
+structlog>=23.0.0
+
+# Retry logic and resilience
+tenacity>=8.0.0
+
+# Performance monitoring
+psutil>=5.9.0
+memory-profiler>=0.60.0
+
+# Testing utilities
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+pytest-cov>=4.0.0
+
 # Optional: OpenAI integration
-# openai>=0.27.0 
+openai>=1.0.0
+
+# Async dependencies for performance
+httpx>=0.25.0
+asyncio-throttle>=1.0.0
+
+# Testing
+pytest-benchmark>=4.0.0
+
+# Optional but recommended
+PyYAML>=6.0
+toml>=0.10.2
+gitpython>=3.1.0
+
+# For parallel processing
+concurrent-futures-backport>=3.1.0  # For Python < 3.8
+multiprocessing-logging>=0.3.4
+
+# Caching
+diskcache>=5.6.0
+
+# For better dependency injection (optional)
+inject>=5.0.0
+
+# AI providers
+google-generativeai>=0.8.0
+anthropic>=0.34.0
+
+# Development tools
+black>=23.0.0
+ruff>=0.1.0
+mypy>=1.0.0
+
+# Performance
+cachetools>=5.0.0
+
+# Documentation
+mkdocs>=1.5.0
+mkdocs-material>=9.0.0
+mkdocstrings[python]>=0.24.0
+
+# Optional: Redis for distributed caching
+# redis>=5.0.0
+# hiredis>=2.0.0
+
+# Optional: Webhook support
+# requests>=2.31.0
+# webhook>=3.0.0
+
+# Prompt toolkit for interactive prompts
+prompt-toolkit>=3.0.0
+
+# Questionary for interactive prompts
+questionary>=2.0.0 

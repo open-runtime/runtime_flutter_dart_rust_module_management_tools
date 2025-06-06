@@ -1,41 +1,36 @@
 """
-Command-line interface tools for repository management.
+CLI tools for runtime_flutter_dart_rust_module_management_tools.
 
-Each CLI tool can be run independently:
-- Directly: python tooling/cli/script_name.py
-- As module: python -m tooling.cli.script_name
-- As command: rt-command-name (after pip install)
+Unified tools:
+- version_tools.py - Version management (get-tag, update, prepare, push)
+- release_tools.py - Release management (check, notes, create, retag)
+- commit_tools.py - Commit message generation
+- changelog_tools.py - Changelog management (validate, analyze)
+- pr_tools.py - Pull request management (create, open, list)
+
+Specialized tools:
+- sync_changelogs.py - Advanced changelog synchronization (3900+ lines)
+- cli_utils.py - Shared CLI utilities
 """
 
-# List available CLI modules (but don't import them automatically)
-CLI_MODULES = [
-    'main',  # Main entry point
-    'smart_commit',
-    'smart_commit_fast',
+# List of available CLI tools
+CLI_TOOLS = [
+    'version_tools',
+    'release_tools', 
+    'commit_tools',
+    'changelog_tools',
+    'pr_tools',
     'sync_changelogs',
-    'sync_changelog_ultra',
-    'release',
-    'prepare_new_patch',
-    'push_new_patch',
-    'retag_release',
-    'update_version',
-    'get_new_patch_tag',
-    'validate_changelogs',
-    'pre_release_check',
-    'analyze_changelog_history',
-    'generate_release_notes',
-    'open_pull_request_current_tagged_branch',
-    'setup_ai_tools',
-    'setup_permissions',
-    'install_gemini_cli',
 ]
 
-# For backward compatibility, provide lazy imports
-def __getattr__(name):
-    """Lazy import of CLI modules."""
-    if name in CLI_MODULES:
-        import importlib
-        return importlib.import_module(f'.{name}', __name__)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+# Tool descriptions for help
+TOOL_DESCRIPTIONS = {
+    'version_tools': 'Version management (get-tag, update, prepare, push)',
+    'release_tools': 'Release workflow (check, notes, create, retag)',
+    'commit_tools': 'AI-powered commit message generation',
+    'changelog_tools': 'Changelog validation and analysis',
+    'pr_tools': 'Pull request creation and management',
+    'sync_changelogs': 'Advanced changelog synchronization with AI',
+}
 
-__all__ = CLI_MODULES 
+__all__ = CLI_TOOLS + ['cli_utils'] 

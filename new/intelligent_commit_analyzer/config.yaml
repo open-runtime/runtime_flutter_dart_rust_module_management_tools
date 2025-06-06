@@ -1,0 +1,43 @@
+# AI Tool Configuration
+claude_api_key: ${ANTHROPIC_API_KEY}
+openai_api_key: ${OPENAI_API_KEY}
+google_api_key: ${GOOGLE_API_KEY}
+
+# Repository Configuration  
+repository_path: .
+branch: main
+
+# Pipeline Configuration
+max_concurrent_tasks: 10
+enable_unsafe_mode: false  # Enable for full autonomy
+
+# GitHub Configuration
+github_token: ${GITHUB_TOKEN}
+link_issues: true
+
+# Logging Configuration
+log_level: INFO
+log_file: commit_analyzer.log
+
+# Analysis Configuration
+analysis:
+  max_diff_size: 10000
+  context_lines: 3
+  include_file_types:
+    - .py
+    - .js
+    - .ts
+    - .java
+    - .go
+  exclude_patterns:
+    - __pycache__
+    - node_modules
+    - .git
+    - .env
+
+# Commit Message Configuration
+commit_message:
+  max_title_length: 72
+  max_body_line_length: 100
+  include_co_authors: true
+  sign_commits: false

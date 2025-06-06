@@ -1,0 +1,664 @@
+name: Build and Release runtime-fdr-pkg-tools
+run-name: >-
+  ${{ 
+    github.event_name == 'pull_request' 
+    && format('PR #{0} - {1}', github.event.pull_request.number, github.event.pull_request.title) 
+    || format('Building {0} - {1} event', github.ref_name, github.event_name) 
+  }}
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCS_BASE_PATH: 'open-runtime-ci-cd-dynamic-libraries/runtime_fdr_pkg_tools'
+  PACKAGE_NAME: 'runtime-fdr-pkg-tools'
+  PYTHON_PACKAGE_NAME: 'runtime_fdr_pkg_tools'
+  CLI_BINARY_NAME: 'runtime-fdr-pkg-tools'
+
+permissions:
+  contents: read
+  id-token: write  # Required for Google Cloud authentication
+  packages: write  # For GitHub Packages
+
+jobs:
+  define-matrices:
+    name: Setup Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      macos_apple_silicon_matrix: ${{ steps.refined.outputs.macos_apple_silicon_matrix }}
+      macos_intel_matrix: ${{ steps.refined.outputs.macos_intel_matrix }}
+      ubuntu_matrix: ${{ steps.refined.outputs.ubuntu_matrix }}
+      windows_matrix: ${{ steps.refined.outputs.windows_matrix }}
+      version: ${{ steps.set_version.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+            platforms: [
+              {
+                runner: macos-13-xlarge,
+                refined_matrix: macos_apple_silicon,
+                name: macOS (Apple Silicon),
+                system_information: {
+                  operating_system_family: macos,
+                  kernel_architecture: arm64,
+                  kernel_family: unix
+                },
+                architecture: {
+                  python: arm64,
+                  python_version: 3.9
+                }
+              },
+              {
+                runner: macos-13-large,
+                refined_matrix: macos_intel,
+                name: macOS (Intel),
+                system_information: {
+                  operating_system_family: macos,
+                  kernel_architecture: x86_64,
+                  kernel_family: unix
+                },
+                architecture: {
+                  python: x64,
+                  python_version: 3.9
+                }
+              },
+              {
+                runner: ubuntu-latest-16-cores,
+                refined_matrix: ubuntu,
+                name: Ubuntu,
+                system_information: {
+                  operating_system_family: linux,
+                  kernel_architecture: x86_64,
+                  kernel_family: unix
+                },
+                architecture: {
+                  python: x64,
+                  python_version: 3.9
+                }
+              },
+              {
+                runner: windows-latest-16-cores,
+                refined_matrix: windows,
+                name: Windows,
+                system_information: {
+                  operating_system_family: windows,
+                  kernel_architecture: x86_64,
+                  kernel_family: windows_nt
+                },
+                architecture: {
+                  python: x64,
+                  python_version: 3.9
+                }
+              }
+            ]
+          }
+
+    steps:
+      - name: Debug Version Information
+        run: |
+          echo "============= VERSION INFORMATION ============="
+          echo "Event name: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Ref name: ${{ github.ref_name }}"
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "=============================================="
+
+      - name: Set Version for Artifacts
+        id: set_version
+        run: |
+          # Default to ref_name
+          ARTIFACT_VERSION="${{ github.ref_name }}"
+          
+          # For pull requests, use PR-number format
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ARTIFACT_VERSION="PR-${{ github.event.pull_request.number }}"
+            echo "Using PR number for version: $ARTIFACT_VERSION"
+          # For tags, use the tag name directly
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            ARTIFACT_VERSION="${{ github.ref_name }}"
+            echo "Using tag name for version: $ARTIFACT_VERSION"
+          # For branches, use the branch name
+          elif [[ "${{ github.ref }}" == refs/heads/* ]]; then
+            ARTIFACT_VERSION="${{ github.ref_name }}"
+            echo "Using branch name for version: $ARTIFACT_VERSION"
+          fi
+          
+          echo "version=$ARTIFACT_VERSION" >> $GITHUB_OUTPUT
+          echo "Will use version: $ARTIFACT_VERSION for all artifacts"
+      
+      - name: Decode GCP Credentials for Cleanup
+        id: decoded_gcp_cleanup_json
+        run: |
+          # Secret location: https://github.com/organizations/open-runtime/settings/secrets/actions
+          # GCP Service Account: https://console.cloud.google.com/iam-admin/serviceaccounts/details/102629869278480058286?project=global-cloud-runtime
+          if [[ -z "${{ secrets._GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 }}" ]]; then
+            echo "Error: _GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 secret is not set"
+            exit 1
+          fi
+          echo "decoded=$(echo '${{ secrets._GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 }}' | base64 --decode | jq -c .)" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud for cleanup 
+        uses: google-github-actions/auth@v2.1.3
+        id: gcp-auth-cleanup
+        with:
+          credentials_json: ${{ steps.decoded_gcp_cleanup_json.outputs.decoded }}
+          project_id: 'global-cloud-runtime'
+          create_credentials_file: true
+
+      - name: Set up gcloud Cloud SDK for cleanup
+        uses: google-github-actions/setup-gcloud@v2.1.0
+        with:
+          version: '>= 424.0.0'
+          
+      - name: Cleanup redundant GCS folders
+        run: |
+          echo "Checking for redundant GCS folders..."
+          
+          # Get the correct folder name with runtime_ prefix
+          CORRECT_PATH="${{ env.GCS_BASE_PATH }}"
+          
+          # Check for the older incorrect path that might have been created
+          INCORRECT_PATH="open-runtime-ci-cd-dynamic-libraries/vector_search"
+          
+          # Verify if incorrect path exists
+          if gsutil -q stat "gs://${INCORRECT_PATH}"; then
+            echo "Found redundant folder at gs://${INCORRECT_PATH}, cleaning up..."
+            
+            # List what would be deleted
+            echo "Contents that will be removed:"
+            gsutil ls -r "gs://${INCORRECT_PATH}/"
+            
+            # Remove the redundant folder
+            gsutil -m rm -r "gs://${INCORRECT_PATH}/"
+            
+            echo "✅ Cleaned up redundant folder gs://${INCORRECT_PATH}/"
+          else
+            echo "No redundant folders found at gs://${INCORRECT_PATH}/"
+          fi
+
+      - name: Install jq
+        run: |
+          if ! command -v jq &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
+
+      - name: Output Matrices
+        id: matrices
+        run: |
+          configurations=$(jq -c '.' <<< '${{ toJSON(matrix.config.platforms) }}')
+          echo "metricized=$configurations" >> $GITHUB_OUTPUT
+
+      - name: Output Refined Matrix
+        id: refined
+        run: |
+          # macOS Apple Silicon
+          JSON_OUTPUT_MAS=$(jq -c '.[] | select(.refined_matrix == "macos_apple_silicon")' <<< '${{ steps.matrices.outputs.metricized }}')
+          echo "macos_apple_silicon_matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$JSON_OUTPUT_MAS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # macOS Intel
+          JSON_OUTPUT_MI=$(jq -c '.[] | select(.refined_matrix == "macos_intel")' <<< '${{ steps.matrices.outputs.metricized }}')
+          echo "macos_intel_matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$JSON_OUTPUT_MI" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+
+          # Ubuntu
+          JSON_OUTPUT_UBU=$(jq -c '.[] | select(.refined_matrix == "ubuntu")' <<< '${{ steps.matrices.outputs.metricized }}')
+          echo "ubuntu_matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$JSON_OUTPUT_UBU" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Windows
+          JSON_OUTPUT_WIN=$(jq -c '.[] | select(.refined_matrix == "windows")' <<< '${{ steps.matrices.outputs.metricized }}')
+          echo "windows_matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$JSON_OUTPUT_WIN" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Echo Matrices Outputs
+        run: |
+          echo "macos_apple_silicon_matrix=$(jq -c '.' <<< '${{ steps.refined.outputs.macos_apple_silicon_matrix }}')"
+          echo "macos_intel_matrix=$(jq -c '.' <<< '${{ steps.refined.outputs.macos_intel_matrix }}')"
+          echo "ubuntu_matrix=$(jq -c '.' <<< '${{ steps.refined.outputs.ubuntu_matrix }}')"
+          echo "windows_matrix=$(jq -c '.' <<< '${{ steps.refined.outputs.windows_matrix }}')"
+
+  # ----- Matrix Setup Jobs ----- 
+  macos-apple-silicon-matrix:
+    name: Setup macOS (Apple Silicon) Matrix
+    needs: define-matrices
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - ${{ fromJSON(needs.define-matrices.outputs.macos_apple_silicon_matrix) }}
+    steps:
+      - name: Output Matrix
+        id: matrix_output
+        run: |
+          configuration=$(jq -c '.' <<< '${{ toJSON(matrix.config) }}')
+          echo "metricized=$configuration" >> $GITHUB_OUTPUT
+    outputs:
+      MATRIX_CONFIG: ${{ steps.matrix_output.outputs.metricized }}
+
+  macos-intel-matrix:
+    name: Setup macOS (Intel) Matrix
+    needs: define-matrices
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - ${{ fromJSON(needs.define-matrices.outputs.macos_intel_matrix) }}
+    steps:
+      - name: Output Matrix
+        id: matrix_output
+        run: |
+          configuration=$(jq -c '.' <<< '${{ toJSON(matrix.config) }}')
+          echo "metricized=$configuration" >> $GITHUB_OUTPUT
+    outputs:
+      MATRIX_CONFIG: ${{ steps.matrix_output.outputs.metricized }}
+
+
+  ubuntu-matrix:
+    name: Setup Ubuntu Matrix
+    needs: define-matrices
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - ${{ fromJSON(needs.define-matrices.outputs.ubuntu_matrix) }}
+    steps:
+      - name: Output Matrix
+        id: matrix_output
+        run: |
+          configuration=$(jq -c '.' <<< '${{ toJSON(matrix.config) }}')
+          echo "metricized=$configuration" >> $GITHUB_OUTPUT
+    outputs:
+      MATRIX_CONFIG: ${{ steps.matrix_output.outputs.metricized }}
+
+  windows-matrix:
+    name: Setup Windows Matrix
+    needs: define-matrices
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - ${{ fromJSON(needs.define-matrices.outputs.windows_matrix) }}
+    steps:
+      - name: Output Matrix
+        id: matrix_output
+        run: |
+          configuration=$(jq -c '.' <<< '${{ toJSON(matrix.config) }}')
+          echo "metricized=$configuration" >> $GITHUB_OUTPUT
+    outputs:
+      MATRIX_CONFIG: ${{ steps.matrix_output.outputs.metricized }}
+
+  # ----- Reusable Workflow Calls ----- 
+  macos-apple-silicon-composition:
+    name: Build macOS (Apple Silicon)
+    needs: [macos-apple-silicon-matrix, define-matrices]
+    uses: ./.github/workflows/reusable-module-composition.yaml
+    with:
+      matrix-config: ${{ needs.macos-apple-silicon-matrix.outputs.MATRIX_CONFIG }}
+      version: ${{ needs.define-matrices.outputs.version }}
+    secrets: inherit
+
+  macos-intel-composition:
+    name: Build macOS (Intel)
+    needs: [macos-intel-matrix, define-matrices]
+    uses: ./.github/workflows/reusable-module-composition.yaml
+    with:
+      matrix-config: ${{ needs.macos-intel-matrix.outputs.MATRIX_CONFIG }}
+      version: ${{ needs.define-matrices.outputs.version }}
+    secrets: inherit
+
+
+  ubuntu-composition:
+    name: Build Ubuntu
+    needs: [ubuntu-matrix, define-matrices]
+    uses: ./.github/workflows/reusable-module-composition.yaml
+    with:
+      matrix-config: ${{ needs.ubuntu-matrix.outputs.MATRIX_CONFIG }}
+      version: ${{ needs.define-matrices.outputs.version }}
+    secrets: inherit
+
+  windows-composition:
+    name: Build Windows
+    needs: [windows-matrix, define-matrices]
+    uses: ./.github/workflows/reusable-module-composition.yaml
+    with:
+      matrix-config: ${{ needs.windows-matrix.outputs.MATRIX_CONFIG }}
+      version: ${{ needs.define-matrices.outputs.version }}
+    secrets: inherit
+
+  # ----- Release Job ----- 
+  create-release:
+    name: Create GitHub Release / PR Draft
+    needs:
+      - macos-apple-silicon-composition
+      - macos-intel-composition
+      - ubuntu-composition
+      - windows-composition
+      - define-matrices
+    runs-on: ubuntu-latest
+    # Run on successful tag pushes OR successful PR builds
+    if: success() && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'pull_request') 
+    permissions:
+      contents: write  # For creating/updating releases and accessing repo content
+      pull-requests: read  # For reading PR information
+      packages: write  # For GitHub Packages
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable' # Or specify a version like '1.22'
+
+      - name: Install gemini-cli
+        run: go install github.com/eliben/gemini-cli@latest
+
+      - name: Set up Python
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Add Go bin to PATH
+        run: |
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+          echo "Added $HOME/go/bin to PATH for gemini-cli"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Decode GCP Runtime Credentials
+        id: decoded_gcp_runtime_json
+        # Secret location: https://github.com/organizations/open-runtime/settings/secrets/actions
+        # GCP Service Account: https://console.cloud.google.com/iam-admin/serviceaccounts/details/102629869278480058286?project=global-cloud-runtime
+        run: echo "decoded=$(echo '${{ secrets._GITHUB_ACTIONS_GOBAL_CLOUD_RUNTIME_GOOGLE_CLOUD_STORAGE_BASE_64 }}' | base64 --decode | jq -c .)" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud (Runtime Project)
+        uses: google-github-actions/auth@v2.1.3
+        id: gcp-auth-runtime
+        with:
+          credentials_json: ${{ steps.decoded_gcp_runtime_json.outputs.decoded }}
+          project_id: 'global-cloud-runtime' 
+          create_credentials_file: true
+
+      - name: Set up gcloud Cloud SDK environment
+        uses: google-github-actions/setup-gcloud@v2.1.0
+        with:
+          version: '>= 424.0.0'
+
+      - name: Create Release Directory
+        run: mkdir -p release_artifacts
+
+      - name: Download Archives from GCS
+        run: |
+          echo "Downloading archives from GCS..."
+          mkdir -p release_artifacts
+          
+          # Get version from define-matrices job
+          VERSION="${{ needs.define-matrices.outputs.version }}"
+          if [[ -z "$VERSION" ]]; then
+            echo "Error: Version is not set"
+            exit 1
+          fi
+          
+          # Function to download and verify
+          download_and_verify() {
+            local url=$1
+            local output=$2
+            echo "Attempting to download $url to $output..."
+            if gcloud storage cp "$url" "$output"; then
+              echo "✅ Successfully downloaded $output"
+              return 0
+            else
+              echo "⚠️ Warning: Failed to download $url"
+              echo "This is expected if the build for this platform failed."
+              return 1
+            fi
+          }
+          
+          # Download Windows CLI
+          download_and_verify "gs://${{ env.GCS_BASE_PATH }}/${VERSION}/windows_x64/${{ env.CLI_BINARY_NAME }}.zip" "release_artifacts/${{ env.CLI_BINARY_NAME }}_windows_x64.zip"
+          
+          # Download Linux CLI
+          download_and_verify "gs://${{ env.GCS_BASE_PATH }}/${VERSION}/linux_x64/${{ env.CLI_BINARY_NAME }}.tar.gz" "release_artifacts/${{ env.CLI_BINARY_NAME }}_linux_x64.tar.gz"
+          
+          # Download macOS Intel CLI
+          download_and_verify "gs://${{ env.GCS_BASE_PATH }}/${VERSION}/macos_x64/${{ env.CLI_BINARY_NAME }}.zip" "release_artifacts/${{ env.CLI_BINARY_NAME }}_macos_x64.zip"
+          
+          # Download macOS ARM CLI
+          download_and_verify "gs://${{ env.GCS_BASE_PATH }}/${VERSION}/macos_arm64/${{ env.CLI_BINARY_NAME }}.zip" "release_artifacts/${{ env.CLI_BINARY_NAME }}_macos_arm64.zip"
+          
+          # Download Python packages
+          download_and_verify "gs://${{ env.GCS_BASE_PATH }}/${VERSION}/python/*.whl" "release_artifacts/" || echo "No wheel files found"
+          download_and_verify "gs://${{ env.GCS_BASE_PATH }}/${VERSION}/python/*.tar.gz" "release_artifacts/" || echo "No tar.gz files found"
+
+      # Steps for PI3C3S upload - only run for tag releases
+      - name: Decode GCP PI3C3S Credentials
+        if: startsWith(github.ref, 'refs/tags/')
+        id: decoded_gcp_pi3c3s_json
+        run: |
+          # Secret location: https://github.com/organizations/open-runtime/settings/secrets/actions
+          # GCP Service Account: https://console.cloud.google.com/iam-admin/serviceaccounts/details/116162315879340664278?project=pi3c3s-cloud-server
+          if [[ -n "${{ secrets._GITHUB_ACTIONS_PI3C3S_GOOGLE_CLOUD_STORAGE_BASE_64 }}" ]]; then
+            echo "decoded=$(echo '${{ secrets._GITHUB_ACTIONS_PI3C3S_GOOGLE_CLOUD_STORAGE_BASE_64 }}' | base64 --decode | jq -c .)" >> $GITHUB_OUTPUT
+            echo "Using base64 encoded credentials for PI3C3S"
+          elif [[ -n "${{ secrets.PIECES_GCP_CREDENTIALS }}" ]]; then
+            echo "decoded=${{ secrets.PIECES_GCP_CREDENTIALS }}" >> $GITHUB_OUTPUT
+            echo "Using direct JSON credentials for PI3C3S"
+          else
+            echo "No valid credentials found for PI3C3S. Please set either _GITHUB_ACTIONS_PI3C3S_GOOGLE_CLOUD_STORAGE_BASE_64 or PIECES_GCP_CREDENTIALS"
+            exit 1
+          fi
+
+      - name: Authenticate to PI3C3S Cloud Server (Second GCP Project)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: google-github-actions/auth@v2.1.3
+        id: gcp-auth-pi3c3s
+        with:
+          credentials_json: ${{ steps.decoded_gcp_pi3c3s_json.outputs.decoded }}
+          project_id: 'pi3c3s-cloud-server'
+          create_credentials_file: true
+          
+
+      - name: Upload to PI3C3S Cloud Server Bucket
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION="${{ needs.define-matrices.outputs.version }}"
+          # Ensure VERSION has 'v' prefix for the Pieces libraries path
+          if [[ "$VERSION" != v* ]]; then
+            VERSION="v${VERSION}"
+          fi
+          
+          PI3C3S_BUCKET="gs://pieces-libraries"
+          PACKAGE_PATH="${{ env.PACKAGE_NAME }}/${VERSION}"
+          TARGET_PATH="${PI3C3S_BUCKET}/${PACKAGE_PATH}"
+          
+          echo "Uploading files to ${TARGET_PATH}..."
+          
+          # Upload CLI binaries to specific platform folders
+          if [ -f "release_artifacts/${{ env.CLI_BINARY_NAME }}_windows_x64.zip" ]; then
+            gcloud storage cp "release_artifacts/${{ env.CLI_BINARY_NAME }}_windows_x64.zip" "${TARGET_PATH}/windows_x64/"
+          else
+            echo "Warning: Windows zip file not found"
+          fi
+          
+          if [ -f "release_artifacts/${{ env.CLI_BINARY_NAME }}_linux_x64.tar.gz" ]; then
+            gcloud storage cp "release_artifacts/${{ env.CLI_BINARY_NAME }}_linux_x64.tar.gz" "${TARGET_PATH}/linux_x64/"
+          else
+            echo "Warning: Linux tar.gz file not found"
+          fi
+          
+          if [ -f "release_artifacts/${{ env.CLI_BINARY_NAME }}_macos_x64.zip" ]; then
+            gcloud storage cp "release_artifacts/${{ env.CLI_BINARY_NAME }}_macos_x64.zip" "${TARGET_PATH}/macos_x64/"
+          else
+            echo "Warning: macOS Intel zip file not found"
+          fi
+          
+          if [ -f "release_artifacts/${{ env.CLI_BINARY_NAME }}_macos_arm64.zip" ]; then
+            gcloud storage cp "release_artifacts/${{ env.CLI_BINARY_NAME }}_macos_arm64.zip" "${TARGET_PATH}/macos_arm64/"
+          else
+            echo "Warning: macOS ARM zip file not found"
+          fi
+          
+          # Upload Python packages
+          if ls release_artifacts/*.whl 1> /dev/null 2>&1; then
+            gcloud storage cp release_artifacts/*.whl "${TARGET_PATH}/python/"
+          else
+            echo "Warning: No Python wheel files found"
+          fi
+          
+          if ls release_artifacts/*.tar.gz 1> /dev/null 2>&1; then
+            gcloud storage cp release_artifacts/*.tar.gz "${TARGET_PATH}/python/"
+          else
+            echo "Warning: No Python tar.gz files found"
+          fi
+          
+          echo "Verifying all uploaded files exist on Pieces storage..."
+          
+          # Verify uploaded CLI files with gsutil stat
+          gsutil -q stat "${TARGET_PATH}/windows_x64/${{ env.CLI_BINARY_NAME }}_windows_x64.zip" || echo "Warning: Windows ZIP not verified on PI3C3S"
+          gsutil -q stat "${TARGET_PATH}/linux_x64/${{ env.CLI_BINARY_NAME }}_linux_x64.tar.gz" || echo "Warning: Linux tar.gz not verified on PI3C3S"
+          gsutil -q stat "${TARGET_PATH}/macos_x64/${{ env.CLI_BINARY_NAME }}_macos_x64.zip" || echo "Warning: macOS Intel ZIP not verified on PI3C3S"
+          gsutil -q stat "${TARGET_PATH}/macos_arm64/${{ env.CLI_BINARY_NAME }}_macos_arm64.zip" || echo "Warning: macOS ARM ZIP not verified on PI3C3S"
+          
+          echo "✅ Upload to PI3C3S Cloud Server complete - All zip files verified"
+
+      # --- Release Notes Generation --- 
+      - name: Verify Changelog Entries Exist
+        run: |
+          # Determine the version to validate
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${{ needs.define-matrices.outputs.version }}" # Use version from define-matrices for tags
+            echo "Verifying changelogs for tag release: $VERSION"
+          else
+            echo "Verifying changelogs for PR build. Extracting version from pyproject.toml..."
+            VERSION="v$(grep -E '^version = ' pyproject.toml | cut -d'"' -f2)"
+            if [[ -z "$VERSION" ]] || [[ "$VERSION" == "v" ]]; then
+              echo "❌ Error: Could not extract version from pyproject.toml for verification"
+              exit 1
+            fi
+            echo "Extracted version for PR: $VERSION"
+          fi
+          
+          # Remove 'v' prefix for the validation script
+          CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//')
+          
+          # Use the Python validation script
+          echo "Running changelog validation with version: $CLEAN_VERSION"
+          python3 tooling/cli/validate_changelogs.py --version "$CLEAN_VERSION"
+
+      - name: Generate Release Notes
+        id: generate_release_notes
+        run: |
+          # Determine version for display
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${{ needs.define-matrices.outputs.version }}"
+            IS_TAG_RELEASE="--tag-release"
+          else
+            VERSION="v$(grep -E '^version = ' pyproject.toml | cut -d'"' -f2)"
+            if [[ -z "$VERSION" ]] || [[ "$VERSION" == "v" ]]; then
+              echo "❌ Error: Could not extract version from pyproject.toml"
+              exit 1
+            fi
+            IS_TAG_RELEASE=""
+          fi
+          
+          # Build command arguments
+          CMD="python3 tooling/cli/generate_release_notes.py"
+          CMD="$CMD --version $VERSION"
+          CMD="$CMD --artifact-version ${{ needs.define-matrices.outputs.version }}"
+          CMD="$CMD --output release_notes.md"
+          CMD="$CMD --package-name ${{ env.PACKAGE_NAME }}"
+          CMD="$CMD --gcs-base-path ${{ env.GCS_BASE_PATH }}"
+          CMD="$CMD $IS_TAG_RELEASE"
+          
+          # Add PR-specific arguments if needed
+          if [[ -z "$IS_TAG_RELEASE" ]] && [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            CMD="$CMD --pr-number ${{ github.event.pull_request.number }}"
+            CMD="$CMD --pr-url ${{ github.event.pull_request.html_url }}"
+            CMD="$CMD --commit-sha ${{ github.sha }}"
+          fi
+          
+          # Run the Python script
+          echo "Running: $CMD"
+          $CMD
+          
+          # Save the notes file path to output
+          echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
+        env:
+          # Secret location: https://github.com/organizations/open-runtime/settings/secrets/actions
+          # GCP API Key: https://console.cloud.google.com/apis/credentials/key/32eeb733-9795-47b8-9aef-dfc3432404a3?project=global-cloud-runtime
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_GLOBAL_CLOUD_RUNTIME_ACCESS }}
+
+      - name: Verify Artifacts and Output Notes for PR Draft
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "--- Verifying Downloaded Artifacts for PR Draft --- "
+          ls -l release_artifacts
+          echo "--- Draft Release Notes Content --- "
+          cat release_notes.md
+          echo "--- End of Draft Release Notes Content --- "
+
+      - name: List Release Artifacts
+        run: ls -l release_artifacts
+
+      - name: Publish to GitHub Packages
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          TWINE_REPOSITORY_URL: https://npm.pkg.github.com/@${{ github.repository_owner }}
+        run: |
+          python -m pip install twine
+          if ls release_artifacts/*.whl 1> /dev/null 2>&1; then
+            python -m twine upload --skip-existing release_artifacts/*.whl release_artifacts/*.tar.gz || echo "Failed to upload Python packages"
+          fi
+
+      - name: Create GitHub Release / Draft
+        uses: softprops/action-gh-release@v2.0.4
+        with:
+          files: |
+            release_artifacts/${{ env.CLI_BINARY_NAME }}_windows_x64.zip
+            release_artifacts/${{ env.CLI_BINARY_NAME }}_linux_x64.tar.gz
+            release_artifacts/${{ env.CLI_BINARY_NAME }}_macos_x64.zip
+            release_artifacts/${{ env.CLI_BINARY_NAME }}_macos_arm64.zip
+            release_artifacts/*.whl
+            release_artifacts/*.tar.gz
+          fail_on_unmatched_files: false # Don't fail if some files are missing
+          name: >-
+            ${{
+              github.event_name == 'pull_request' &&
+              format('Draft Release for PR #{0}', github.event.pull_request.number) ||
+              format('Release {0}', needs.define-matrices.outputs.version)
+            }}
+          tag_name: ${{ needs.define-matrices.outputs.version }} # Use artifact version (tag or PR-num) for actual tag
+          body_path: release_notes.md
+          draft: ${{ github.event_name == 'pull_request' }}
+          prerelease: ${{ github.event_name == 'pull_request' }}
+          make_latest: ${{ startsWith(github.ref, 'refs/tags/') }} # Only mark actual tags as latest

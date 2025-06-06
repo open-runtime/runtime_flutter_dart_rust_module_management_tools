@@ -15,7 +15,14 @@ import tempfile
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.common_config import Colors, print_color
+try:
+    from tooling.cli.cli_utils import Colors
+except ImportError:
+    from cli.cli_utils import Colors
+
+def print_color(color, message):
+    """Print colored text"""
+    print(f"{color}{message}{Colors.NC}")
 
 
 class TestSyncChangelogs(unittest.TestCase):
