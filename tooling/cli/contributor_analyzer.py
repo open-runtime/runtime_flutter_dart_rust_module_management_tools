@@ -106,6 +106,9 @@ class ContributorProfile:
     # Repository activity tracking
     repository_activity_dates: Dict[str, Tuple[datetime, datetime]] = field(default_factory=dict)  # repo -> (first_commit, last_commit)
     
+    # Organization tracking
+    organizations: Set[str] = field(default_factory=set)  # Organizations this contributor is active in
+    
     # Performance metrics
     processing_time: float = 0.0
     api_calls_used: int = 0
@@ -347,7 +350,7 @@ class ContributorAnalyzer(CLITool):
         parser.add_argument(
             '--max-files-per-contributor',
             type=int,
-            default=20,
+            default=50,
             help='Maximum number of recent files to analyze per contributor'
         )
         
@@ -783,12 +786,14 @@ If you're seeing 404 or 403 errors for private repositories:
             self.console.print("\nGenerating preview profiles...")
             self.console.print(f"[dim]Checking each contributor across up to 10 repositories per organization to find their activity...[/dim]\n")
             
-            # Get ALL sample contributors for preview
-            sample_users = []
+            # Get ALL unique contributors across all orgs for preview
+            all_contributors = set()
             for org, contributors in sample_contributors.items():
-                sample_users.extend(list(contributors))
+                all_contributors.update(contributors)
             
-            self.console.print(f"[cyan]Found {len(sample_users)} active contributors. Generating preview profiles for all...[/cyan]\n")
+            sample_users = list(all_contributors)
+            
+            self.console.print(f"[cyan]Found {len(sample_users)} unique contributors across all organizations. Generating preview profiles for all...[/cyan]\n")
             
                             # Collect basic data for sample contributors
             preview_progress = progress.add_task("Analyzing contributors...", total=len(sample_users))
@@ -824,6 +829,7 @@ If you're seeing 404 or 403 errors for private repositories:
                                     if commit_count > 0:
                                         profile.total_commits += commit_count
                                         profile.repositories.add(f"{org}/{repo}")
+                                        profile.organizations.add(org)  # Track organizations
                                         
                                         # Log for debugging
                                         if self.args.debug_api:
@@ -2208,6 +2214,7 @@ Example:
                 
                 if commit_count > 0:
                     profile.repositories.add(f"{org}/{repo}")
+                    profile.organizations.add(org)  # Track organizations
                     
                     # Analyze recent commits for dates and patterns
                     for commit in commits[:10]:  # Sample recent commits
@@ -2882,9 +2889,14 @@ Please respond in JSON format:
 • Active Repos: {len(profile.repositories)}
 • Work Rate: ~{profile.contribution_frequency:.1f} commits/week
 • Est. Hours: ~{profile.estimated_hours:.0f} hours
-• Intensity: {intensity}
+• Intensity: {intensity}"""
+        
+        # Add organizations if contributor works in multiple
+        if profile.organizations:
+            orgs_str = ", ".join(sorted(profile.organizations))
+            preview += f"\n• Organizations: {orgs_str}"
 
-🔧 Domain Focus:"""
+        preview += "\n\n🔧 Domain Focus:"
         
         if profile.domains:
             for domain, count in sorted(profile.domains.items(), key=lambda x: x[1], reverse=True)[:3]:
