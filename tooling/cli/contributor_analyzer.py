@@ -510,9 +510,18 @@ class ContributorAnalyzer(CLITool):
             if self.args.dry_run:
                 return plan_result
             
-            # For real execution, ask for final confirmation after showing plan
-            if not confirm_with_timeout(f"\n[bold red]🚀 Execute this analysis plan now?[/bold red]", default=True, timeout=5):
-                self.console.print("[yellow]Analysis cancelled[/yellow]")
+            # For real execution, ask for final confirmation after showing plan and preview
+            self.console.print("\n")
+            self.console.rule("[bold yellow]⚡ READY TO ANALYZE[/bold yellow]", style="yellow")
+            self.console.print("\n[bold]The full analysis will:[/bold]")
+            self.console.print("• Analyze [cyan]all[/cyan] contributors across [cyan]all[/cyan] active repositories")
+            self.console.print("• Clone repositories for code analysis (unless --skip-code-analysis)")
+            self.console.print("• Generate detailed markdown profiles for each contributor")
+            self.console.print("• Perform AI-powered skill and code quality assessments")
+            self.console.print(f"• Save profiles to: [green]{self.args.profiles_dir}[/green]")
+            
+            if not confirm_with_timeout(f"\n[bold red]🚀 Proceed with full analysis?[/bold red]", default=False, timeout=10):
+                self.console.print("\n[yellow]Analysis cancelled. Use --dry-run to see the plan without execution.[/yellow]")
                 return 0
             
             # Run analysis
@@ -763,6 +772,118 @@ If you're seeing 404 or 403 errors for private repositories:
         # Check if we found any contributors - if not, show helpful info
         total_contributors = sum(len(contributors) for contributors in sample_contributors.values())
         total_repos = sum(len(repo_list) for repo_list in repos.values())
+        
+        # Generate sample profiles for preview
+        if total_contributors > 0 and not self.args.dry_run:
+            self.console.print("\n")
+            self.console.rule("[bold green]📝 SAMPLE CONTRIBUTOR PROFILES[/bold green]", style="green")
+            self.console.print("\nGenerating preview profiles...")
+            self.console.print(f"[dim]Checking each contributor across up to 10 repositories per organization to find their activity...[/dim]\n")
+            
+            # Get ALL sample contributors for preview
+            sample_users = []
+            for org, contributors in sample_contributors.items():
+                sample_users.extend(list(contributors))
+            
+            self.console.print(f"[cyan]Found {len(sample_users)} active contributors. Generating preview profiles for all...[/cyan]\n")
+            
+            # Collect basic data for sample contributors
+            for username in sample_users:
+                profile = ContributorProfile(username=username)
+                
+                # Find ALL repos this contributor has been active in during the time period
+                for org, all_repo_list in repos.items():
+                    # Check more repos to find where this contributor is active
+                    repos_to_check = all_repo_list[:10]  # Check up to 10 repos per org for preview
+                    
+                    for repo in repos_to_check:
+                        try:
+                            if self.use_pygithub:
+                                org_obj = self.github_client.get_organization(org)
+                                repo_obj = org_obj.get_repo(repo)
+                                
+                                # Count commits in time period
+                                since_date = self.since_date
+                                if since_date.tzinfo is None:
+                                    since_date = since_date.replace(tzinfo=timezone.utc)
+                                
+                                # Check if this user has ANY commits in this repo during the period
+                                commit_count = 0
+                                try:
+                                    for commit in repo_obj.get_commits(author=username, since=since_date):
+                                        commit_count += 1
+                                        if commit_count >= 5:  # Just need to confirm activity
+                                            break
+                                    
+                                    if commit_count > 0:
+                                        profile.total_commits += commit_count
+                                        profile.repositories.add(f"{org}/{repo}")
+                                        
+                                        # Log for debugging
+                                        if self.args.debug_api:
+                                            logger.info(f"Found {commit_count} commits by {username} in {org}/{repo}")
+                                        
+                                        # Sample some file changes for preview
+                                        if not self.args.skip_code_analysis and commit_count > 0:
+                                            try:
+                                                file_changes = set()
+                                                commit_sample_count = 0
+                                                for commit in repo_obj.get_commits(author=username, since=since_date):
+                                                    # Get files changed in this commit
+                                                    for file in commit.files[:3]:  # Max 3 files per commit
+                                                        if file.filename:
+                                                            file_changes.add(file.filename)
+                                                            # Detect domain from file path
+                                                            if 'backend' in file.filename or 'server' in file.filename or 'api' in file.filename:
+                                                                profile.domains['Backend'] = profile.domains.get('Backend', 0) + 1
+                                                            elif 'frontend' in file.filename or 'ui' in file.filename or 'web' in file.filename:
+                                                                profile.domains['Frontend'] = profile.domains.get('Frontend', 0) + 1
+                                                            elif 'test' in file.filename:
+                                                                profile.domains['Testing'] = profile.domains.get('Testing', 0) + 1
+                                                            elif 'docs' in file.filename or 'README' in file.filename:
+                                                                profile.domains['Documentation'] = profile.domains.get('Documentation', 0) + 1
+                                                            
+                                                            # Track technology from file extensions
+                                                            ext = file.filename.split('.')[-1] if '.' in file.filename else ''
+                                                            if ext in ['py', 'js', 'ts', 'dart', 'swift', 'kt', 'java', 'go', 'rs']:
+                                                                profile.technology_stack.add(ext)
+                                                    
+                                                    commit_sample_count += 1
+                                                    if commit_sample_count >= 3:  # Sample 3 commits max
+                                                        break
+                                                
+                                                # Store sampled files
+                                                profile.notable_contributions = list(file_changes)[:10]  # Store up to 10 files
+                                                
+                                            except Exception as e:
+                                                logger.debug(f"Error sampling code for {username} in {org}/{repo}: {e}")
+                                except Exception as e:
+                                    # User might not have commits in this repo, that's OK
+                                    if "The listed users and repositories cannot be searched" not in str(e):
+                                        logger.debug(f"Error checking {username} in {org}/{repo}: {e}")
+                        except Exception as e:
+                            logger.debug(f"Error accessing {org}/{repo}: {e}")
+                
+                # Set sample dates
+                profile.first_contribution = self.since_date
+                profile.last_contribution = datetime.now(timezone.utc)
+                
+                # Calculate basic metrics
+                self._calculate_derived_metrics(profile)
+                
+                # Generate preview markdown
+                preview_content = self._generate_profile_preview(profile)
+                
+                # Display in a nice panel
+                from rich.panel import Panel
+                panel = Panel(
+                    preview_content,
+                    title=f"[cyan]@{username}[/cyan]",
+                    border_style="green",
+                    expand=False,
+                    padding=(1, 2)
+                )
+                self.console.print(panel)
         
         if total_contributors == 0:
             self.console.print("")
@@ -1384,11 +1505,54 @@ Example:
         self.console.print(resource_table)
     
     async def _get_repositories_to_analyze(self) -> Dict[str, List[str]]:
-        """Get list of repositories to analyze"""
+        """Get list of repositories to analyze - returns only repos with activity in time period"""
         if self.use_pygithub:
             return self._get_repositories_pygithub()
         else:
             return await self._get_repositories_github_cli()
+    
+    async def _expand_repos_for_contributors(self, initial_repos: Dict[str, List[str]], 
+                                           contributors: Set[str]) -> Dict[str, List[str]]:
+        """Find additional repos that the discovered contributors are active in"""
+        expanded_repos = {org: list(repos) for org, repos in initial_repos.items()}
+        
+        if self.use_pygithub:
+            # For each contributor, find other repos they're active in
+            for username in list(contributors)[:20]:  # Limit to prevent explosion
+                for org_name in self.args.organizations:
+                    try:
+                        org = self.github_client.get_organization(org_name)
+                        # Get all repos in the org
+                        for repo in org.get_repos():
+                            repo_name = repo.name
+                            
+                            # Skip if already in our list
+                            if repo_name in expanded_repos.get(org_name, []):
+                                continue
+                            
+                            # Check if contributor is active in this repo
+                            try:
+                                since_date = self.since_date
+                                if since_date.tzinfo is None:
+                                    since_date = since_date.replace(tzinfo=timezone.utc)
+                                
+                                # Just check if they have any commits
+                                has_commits = False
+                                for commit in repo.get_commits(author=username, since=since_date):
+                                    has_commits = True
+                                    break
+                                
+                                if has_commits:
+                                    if org_name not in expanded_repos:
+                                        expanded_repos[org_name] = []
+                                    expanded_repos[org_name].append(repo_name)
+                                    logger.info(f"Added {org_name}/{repo_name} - {username} is active there")
+                            except:
+                                pass
+                    except Exception as e:
+                        logger.debug(f"Error expanding repos for {username}: {e}")
+        
+        return expanded_repos
     
     def _get_repositories_pygithub(self) -> Dict[str, List[str]]:
         """Get repositories using PyGithub - only returns repos with activity in the time period"""
@@ -1661,6 +1825,27 @@ Example:
                 # Phase 2: Contributor Discovery
                 contributor_task = progress.add_task("👥 Discovering contributors...", total=total_repos)
                 contributors = await self._discover_contributors(repos, progress, contributor_task)
+                
+                # Expand repositories to include all where contributors are active
+                if not self.args.repositories and len(contributors) > 0:  # Only expand if user didn't specify specific repos
+                    self.console.print(f"\n[cyan]Found {len(contributors)} contributors. Expanding search to find all their active repositories...[/cyan]")
+                    expanded_repos = await self._expand_repos_for_contributors(repos, contributors)
+                    
+                    added_repos = []
+                    for org, repo_list in expanded_repos.items():
+                        for repo in repo_list:
+                            if org not in repos or repo not in repos.get(org, []):
+                                added_repos.append(f"{org}/{repo}")
+                    
+                    if added_repos:
+                        self.console.print(f"[green]✓ Found {len(added_repos)} additional repositories where contributors are active[/green]")
+                        if self.args.debug_api:
+                            for repo in added_repos[:10]:  # Show first 10
+                                self.console.print(f"  • {repo}")
+                            if len(added_repos) > 10:
+                                self.console.print(f"  • ... and {len(added_repos) - 10} more")
+                        repos = expanded_repos
+                        total_repos = sum(len(r) for r in repos.values())
                 
                 # Phase 3: Data Collection
                 collection_task = progress.add_task("📊 Collecting contribution data...", total=len(contributors))
@@ -2508,6 +2693,60 @@ Please respond in JSON format:
                 logger.warning(f"Failed to write {len(failed_writes)} profile files")
             else:
                 logger.info(f"Successfully wrote {len(profile_data)} profile files")
+    
+    def _generate_profile_preview(self, profile: ContributorProfile) -> str:
+        """Generate a concise preview of contributor profile"""
+        
+        # Calculate work intensity
+        intensity = "High" if profile.contribution_frequency > 10 else "Medium" if profile.contribution_frequency > 5 else "Normal"
+        
+        preview = f"""📊 Quick Stats:
+• Commits: {profile.total_commits} (sampled)
+• Active Repos: {len(profile.repositories)}
+• Work Rate: ~{profile.contribution_frequency:.1f} commits/week
+• Est. Hours: ~{profile.estimated_hours:.0f} hours
+• Intensity: {intensity}
+
+🔧 Domain Focus:"""
+        
+        if profile.domains:
+            for domain, count in sorted(profile.domains.items(), key=lambda x: x[1], reverse=True)[:3]:
+                preview += f"\n• {domain.title()}: {count} repo{'s' if count > 1 else ''}"
+        else:
+            preview += "\n• Analysis pending..."
+        
+        # Show technologies if available
+        if profile.technology_stack:
+            preview += f"\n\n💻 Technologies: {', '.join(list(profile.technology_stack)[:5])}"
+            if len(profile.technology_stack) > 5:
+                preview += f" +{len(profile.technology_stack) - 5} more"
+        
+        preview += f"\n\n📁 Active Repositories:"
+        for repo in list(profile.repositories)[:3]:
+            preview += f"\n• {repo}"
+        if len(profile.repositories) > 3:
+            preview += f"\n• ... and {len(profile.repositories) - 3} more"
+        
+        # Show sampled work if available
+        if profile.notable_contributions:
+            preview += f"\n\n📝 Recent Work (sampled):"
+            for file in profile.notable_contributions[:4]:
+                # Shorten long file paths
+                if len(file) > 40:
+                    parts = file.split('/')
+                    if len(parts) > 2:
+                        file = f".../{'/'.join(parts[-2:])}"
+                preview += f"\n• {file}"
+            if len(profile.notable_contributions) > 4:
+                preview += f"\n• ... and {len(profile.notable_contributions) - 4} more files"
+        
+        if profile.days_per_week > 0:
+            consistency = "⭐⭐⭐⭐⭐" if profile.days_per_week > 4 else "⭐⭐⭐⭐" if profile.days_per_week > 3 else "⭐⭐⭐"
+            preview += f"\n\n🕐 Work Pattern: {profile.days_per_week:.1f} days/week {consistency}"
+        
+        preview += "\n\n[dim]Note: This is a preview based on sampled data.[/dim]"
+        
+        return preview
     
     def _generate_profile_markdown(self, profile: ContributorProfile) -> str:
         """Generate markdown profile for a contributor"""
