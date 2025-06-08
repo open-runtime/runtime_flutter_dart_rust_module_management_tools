@@ -20,12 +20,15 @@ import json
 import os
 import subprocess
 import time
+import threading
+import queue
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Any, Tuple
 from rich.prompt import Confirm, Prompt
+from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 # Set environment variable early to bypass project structure validation
@@ -91,6 +94,46 @@ class ContributorProfile:
     # Performance metrics
     processing_time: float = 0.0
     api_calls_used: int = 0
+
+
+def confirm_with_timeout(prompt: str, default: bool = True, timeout: int = 5) -> bool:
+    """
+    Ask for confirmation with a timeout. If no input is received within the timeout,
+    return the default value.
+    
+    Args:
+        prompt: The prompt to display
+        default: The default value to return after timeout
+        timeout: Seconds to wait for input
+    
+    Returns:
+        User's choice or default after timeout
+    """
+    console = Console()
+    
+    # Queue to communicate between threads
+    result_queue = queue.Queue()
+    
+    def get_user_input():
+        """Get user input in a separate thread"""
+        try:
+            answer = Confirm.ask(prompt, default=default)
+            result_queue.put(answer)
+        except Exception:
+            result_queue.put(default)
+    
+    # Start input thread
+    input_thread = threading.Thread(target=get_user_input, daemon=True)
+    input_thread.start()
+    
+    # Wait for input with timeout
+    try:
+        result = result_queue.get(timeout=timeout)
+        return result
+    except queue.Empty:
+        # Timeout - return default
+        console.print(f"\n[yellow]No input received within {timeout} seconds, using default: {'yes' if default else 'no'}[/yellow]")
+        return default
 
 
 class ModelRotator:
@@ -331,7 +374,14 @@ class ContributorAnalyzer(CLITool):
         parser.add_argument(
             '--exclude-repos',
             nargs='+',
-            help='Repository names to exclude from analysis (e.g., homebrew-core)'
+            default=['homebrew-core'],
+            help='Repository names to exclude from analysis (default: homebrew-core)'
+        )
+        
+        parser.add_argument(
+            '--exclude-contributors',
+            nargs='+',
+            help='Contributor usernames to exclude from analysis (e.g., former employees)'
         )
     
     def validate_args(self) -> bool:
@@ -449,7 +499,7 @@ class ContributorAnalyzer(CLITool):
                 return plan_result
             
             # For real execution, ask for final confirmation after showing plan
-            if not Confirm.ask(f"\n[bold red]🚀 Execute this analysis plan now?[/bold red]", default=False):
+            if not confirm_with_timeout(f"\n[bold red]🚀 Execute this analysis plan now?[/bold red]", default=False, timeout=5):
                 self.console.print("[yellow]Analysis cancelled[/yellow]")
                 return 0
             
@@ -730,7 +780,7 @@ Example:
         
         # Get user confirmation for dry run
         if self.args.dry_run:
-            if not Confirm.ask(f"\n[bold yellow]📋 Does this analysis plan look correct?[/bold yellow]", default=True):
+            if not confirm_with_timeout(f"\n[bold yellow]📋 Does this analysis plan look correct?[/bold yellow]", default=True, timeout=5):
                 self.console.print("[yellow]Plan rejected by user[/yellow]")
                 return 1
             
@@ -947,10 +997,12 @@ Example:
                             raise
                         
                         if commits:
-                            # Get contributors
+                            # Get contributors who have commits in the time period
                             contributors = set()
-                            for contributor in repo.get_contributors():
-                                contributors.add(contributor.login)
+                            # Go through the recent commits to find active contributors
+                            for commit in repo.get_commits(since=since_date):
+                                if commit.author:
+                                    contributors.add(commit.author.login)
                                 if len(contributors) >= 10:  # Limit to 10 contributors per repo for sampling
                                     break
                             
@@ -958,7 +1010,7 @@ Example:
                                 repos_with_activity.append((repo_name, len(contributors)))
                                 sample_contributors[org_name].update(contributors)
                                 status_counts["active"] += 1
-                                logger.info(f"✓ Found {len(contributors)} contributors in {org_name}/{repo_name}")
+                                logger.info(f"✓ Found {len(contributors)} active contributors in {org_name}/{repo_name}")
                         else:
                             status_counts["no_recent_commits"] += 1
                             
@@ -1051,9 +1103,9 @@ Example:
                                 '-F', 'state=all', '-F', 'per_page=100',
                                 '-F', f'since={since_str}'
                             ])
-                            if pr_result.success:
-                                pr_data = json.loads(pr_result.stdout)
-                                pr_count = len(pr_data) if isinstance(pr_data, list) else 0
+                    if pr_result.success:
+                        pr_data = json.loads(pr_result.stdout)
+                        pr_count = len(pr_data) if isinstance(pr_data, list) else 0
                     
                     if issue_result.success:
                         try:
@@ -1073,9 +1125,9 @@ Example:
                                 '-F', 'state=all', '-F', 'per_page=100',
                                 '-F', f'since={since_str}'
                             ])
-                            if issue_result.success:
-                                issue_data = json.loads(issue_result.stdout)
-                                issue_count = len(issue_data) if isinstance(issue_data, list) else 0
+                    if issue_result.success:
+                        issue_data = json.loads(issue_result.stdout)
+                        issue_count = len(issue_data) if isinstance(issue_data, list) else 0
                     
                     logger.debug(f"Found {pr_count} PRs and {issue_count} issues in {org}/{repo} since {since_str}")
                     return org, repo, pr_count, issue_count
@@ -1327,19 +1379,27 @@ Example:
             return await self._get_repositories_github_cli()
     
     def _get_repositories_pygithub(self) -> Dict[str, List[str]]:
-        """Get repositories using PyGithub (works better with private repos)"""
+        """Get repositories using PyGithub - only returns repos with activity in the time period"""
         repos = {}
         
         # Get excluded repos list
         excluded_repos = set(self.args.exclude_repos) if self.args.exclude_repos else set()
         
+        # PyGithub expects timezone-aware datetime
+        since_date = self.since_date
+        if since_date.tzinfo is None:
+            since_date = since_date.replace(tzinfo=timezone.utc)
+        
         for org_name in self.args.organizations:
             try:
                 org = self.github_client.get_organization(org_name)
                 repos[org_name] = []
+                active_repo_count = 0
+                checked_repo_count = 0
                 
                 if self.args.repositories:
-                    # Get specific repositories
+                    # Check specific repositories for activity
+                    logger.info(f"Checking specified repositories in {org_name} for activity since {since_date.strftime('%Y-%m-%d')}...")
                     for repo_name in self.args.repositories:
                         if '/' in repo_name:
                             # Full repo name provided
@@ -1355,45 +1415,90 @@ Example:
                         
                         try:
                             repo = org.get_repo(repo_name)
-                            repos[org_name].append(repo.name)
-                            logger.info(f"Found repository: {org_name}/{repo.name}")
+                            checked_repo_count += 1
+                            
+                            # Check if repo has commits in the time period
+                            try:
+                                commits = list(repo.get_commits(since=since_date))
+                                if commits:
+                                    repos[org_name].append(repo.name)
+                                    active_repo_count += 1
+                                    logger.info(f"✓ Active repository: {org_name}/{repo.name} ({len(commits)} commits since {since_date.strftime('%Y-%m-%d')})")
+                                else:
+                                    logger.debug(f"⚪ No activity in {org_name}/{repo.name} since {since_date.strftime('%Y-%m-%d')}")
+                            except GithubException as e:
+                                if "Git Repository is empty" in str(e):
+                                    logger.debug(f"⚪ Empty repository: {org_name}/{repo.name}")
+                                else:
+                                    logger.warning(f"Error checking activity for {org_name}/{repo.name}: {e}")
+                                    
                         except GithubException as e:
                             logger.warning(f"Could not access {org_name}/{repo_name}: {e}")
                 else:
-                    # Get all repositories and sort by pushed_at date
-                    logger.info(f"Fetching all repositories from {org_name} to find most recently active...")
-                    all_repos = []
+                    # Get all repositories and check for activity
+                    logger.info(f"Checking all repositories in {org_name} for activity since {since_date.strftime('%Y-%m-%d')}...")
                     excluded_count = 0
+                    empty_count = 0
+                    no_activity_count = 0
                     
+                    # First, get all repos sorted by pushed_at to check most recently active first
+                    all_repo_list = []
                     for repo in org.get_repos(sort='pushed', direction='desc'):
+                        all_repo_list.append(repo)
+                    
+                    logger.info(f"Found {len(all_repo_list)} total repositories in {org_name}, checking for activity...")
+                    
+                    for repo in all_repo_list:
                         if repo.name in excluded_repos:
                             logger.debug(f"Excluding repository {repo.name}")
                             excluded_count += 1
                             continue
                         
-                        # Store repo with its pushed_at date
-                        all_repos.append({
-                            'name': repo.name,
-                            'pushed_at': repo.pushed_at,
-                            'archived': repo.archived
-                        })
+                        if repo.archived:
+                            logger.debug(f"⚪ Archived repository: {repo.name}")
+                            continue
+                        
+                        checked_repo_count += 1
+                        
+                        # Quick check: if pushed_at is before our date, skip checking commits
+                        if repo.pushed_at and repo.pushed_at < since_date:
+                            logger.debug(f"⚪ No recent pushes to {repo.name} (last push: {repo.pushed_at.strftime('%Y-%m-%d')})")
+                            no_activity_count += 1
+                            continue
+                        
+                        # Check for commits in the time period
+                        try:
+                            # Just check if there's at least one commit
+                            commits = list(repo.get_commits(since=since_date).get_page(0))
+                            if commits:
+                                repos[org_name].append(repo.name)
+                                active_repo_count += 1
+                                logger.debug(f"✓ Active repository: {repo.name}")
+                            else:
+                                no_activity_count += 1
+                                logger.debug(f"⚪ No commits in {repo.name} since {since_date.strftime('%Y-%m-%d')}")
+                        except GithubException as e:
+                            if "Git Repository is empty" in str(e):
+                                empty_count += 1
+                                logger.debug(f"⚪ Empty repository: {repo.name}")
+                            else:
+                                logger.debug(f"Error checking {repo.name}: {e}")
                     
-                    # Sort by pushed_at date (most recent first) and filter out archived
-                    active_repos = [r for r in all_repos if not r['archived']]
-                    active_repos.sort(key=lambda x: x['pushed_at'] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+                    # Log summary
+                    logger.info(f"Activity summary for {org_name}:")
+                    logger.info(f"  - Active repositories: {active_repo_count}")
+                    logger.info(f"  - No activity: {no_activity_count}")
+                    logger.info(f"  - Empty repositories: {empty_count}")
+                    logger.info(f"  - Excluded repositories: {excluded_count}")
                     
-                    # Add all repos (sorted by activity)
-                    repos[org_name] = [r['name'] for r in active_repos]
-                    
-                    if excluded_count > 0:
-                        logger.info(f"Found {len(repos[org_name])} repositories in {org_name} (excluding {excluded_count} repos), sorted by recent activity")
-                    else:
-                        logger.info(f"Found {len(repos[org_name])} repositories in {org_name}, sorted by recent activity")
-                    
-                    # Log the top 5 most active repos
                     if repos[org_name]:
                         top_5 = repos[org_name][:5]
-                        logger.info(f"Top 5 most recently active repos in {org_name}: {', '.join(top_5)}")
+                        logger.info(f"  - Top 5 active repos: {', '.join(top_5)}")
+                
+                if active_repo_count == 0:
+                    logger.warning(f"⚠️  No repositories with activity since {since_date.strftime('%Y-%m-%d')} found in {org_name}")
+                else:
+                    logger.info(f"✅ Found {active_repo_count} active repositories (out of {checked_repo_count} checked) in {org_name}")
                     
             except GithubException as e:
                 print_warning(f"Error accessing organization '{org_name}': {e}")
@@ -1402,53 +1507,108 @@ Example:
         return repos
     
     async def _get_repositories_github_cli(self) -> Dict[str, List[str]]:
-        """Get list of repositories to analyze using GitHub CLI"""
+        """Get list of repositories to analyze using GitHub CLI - only returns repos with activity"""
         repos = {}
         
         # Get excluded repos list
         excluded_repos = set(self.args.exclude_repos) if self.args.exclude_repos else set()
+        since_str = self.since_date.strftime('%Y-%m-%dT%H:%M:%SZ')
         
         for org in self.args.organizations:
+            repos[org] = []
+            active_repo_count = 0
+            
             if self.args.repositories:
-                # Filter to specified repositories
+                # Check specified repositories for activity
+                logger.info(f"Checking specified repositories in {org} for activity since {self.since_date.strftime('%Y-%m-%d')}...")
                 org_repos = [r for r in self.args.repositories 
                            if '/' not in r or r.startswith(f"{org}/")]
-                # Extract repo names and filter out excluded
-                filtered_repos = []
+                
                 for r in org_repos:
                     repo_name = r.split('/')[-1] if '/' in r else r
-                    if repo_name not in excluded_repos:
-                        filtered_repos.append(repo_name)
-                    else:
+                    
+                    if repo_name in excluded_repos:
                         logger.debug(f"Excluding repository {repo_name}")
-                repos[org] = filtered_repos
-            else:
-                # Get all repositories in organization
-                try:
+                        continue
+                    
+                    # Check if repo has commits in time period
                     result = await self.git_ops.run_command([
-                        'gh', 'repo', 'list', org, '--json', 'name', '--limit', '1000'
+                        'gh', 'api', f'/repos/{org}/{repo_name}/commits',
+                        '-F', f'since={since_str}',
+                        '-F', 'per_page=1'
+                    ])
+                    
+                    if result.success and json.loads(result.stdout or '[]'):
+                        repos[org].append(repo_name)
+                        active_repo_count += 1
+                        logger.info(f"✓ Active repository: {org}/{repo_name}")
+                    else:
+                        logger.debug(f"⚪ No activity in {org}/{repo_name} since {self.since_date.strftime('%Y-%m-%d')}")
+            else:
+                # Get all repositories and check for activity
+                logger.info(f"Checking all repositories in {org} for activity since {self.since_date.strftime('%Y-%m-%d')}...")
+                try:
+                    # First get all repos with more info
+                    result = await self.git_ops.run_command([
+                        'gh', 'repo', 'list', org, '--json', 'name,pushedAt,isArchived', '--limit', '1000'
                     ])
                     
                     if result.success:
                         repo_data = json.loads(result.stdout)
-                        all_repos = [repo['name'] for repo in repo_data]
-                        
-                        # Filter out excluded repos
-                        filtered_repos = []
                         excluded_count = 0
-                        for repo_name in all_repos:
-                            if repo_name not in excluded_repos:
-                                filtered_repos.append(repo_name)
-                            else:
+                        archived_count = 0
+                        no_activity_count = 0
+                        checked_count = 0
+                        
+                        # Sort by pushedAt to check most recently active first
+                        repo_data.sort(key=lambda x: x.get('pushedAt', ''), reverse=True)
+                        
+                        logger.info(f"Found {len(repo_data)} total repositories in {org}, checking for activity...")
+                        
+                        for repo_info in repo_data:
+                            repo_name = repo_info['name']
+                            
+                            if repo_name in excluded_repos:
                                 logger.debug(f"Excluding repository {repo_name}")
                                 excluded_count += 1
+                                continue
+                            
+                            if repo_info.get('isArchived', False):
+                                logger.debug(f"⚪ Archived repository: {repo_name}")
+                                archived_count += 1
+                                continue
+                            
+                            checked_count += 1
+                            
+                            # Check for commits in time period
+                            commits_result = await self.git_ops.run_command([
+                                'gh', 'api', f'/repos/{org}/{repo_name}/commits',
+                                '-F', f'since={since_str}',
+                                '-F', 'per_page=1'
+                            ])
+                            
+                            if commits_result.success:
+                                commits = json.loads(commits_result.stdout or '[]')
+                                if commits:
+                                    repos[org].append(repo_name)
+                                    active_repo_count += 1
+                                    logger.debug(f"✓ Active repository: {repo_name}")
+                                else:
+                                    no_activity_count += 1
+                                    logger.debug(f"⚪ No commits in {repo_name} since {self.since_date.strftime('%Y-%m-%d')}")
+                            else:
+                                logger.debug(f"Error checking {repo_name}: {commits_result.stderr}")
                         
-                        repos[org] = filtered_repos
+                        # Log summary
+                        logger.info(f"Activity summary for {org}:")
+                        logger.info(f"  - Active repositories: {active_repo_count}")
+                        logger.info(f"  - No activity: {no_activity_count}")
+                        logger.info(f"  - Archived repositories: {archived_count}")
+                        logger.info(f"  - Excluded repositories: {excluded_count}")
                         
-                        if excluded_count > 0:
-                            logger.info(f"Found {len(repos[org])} repositories in {org} (excluded {excluded_count})")
-                        else:
-                            logger.info(f"Found {len(repos[org])} repositories in {org}")
+                        if repos[org]:
+                            top_5 = repos[org][:5]
+                            logger.info(f"  - Top 5 active repos: {', '.join(top_5)}")
                     else:
                         error_msg = result.stderr.strip()
                         if "404" in error_msg or "Not Found" in error_msg:
@@ -1457,11 +1617,14 @@ Example:
                             print_warning(f"Access denied to organization '{org}'. You may need additional permissions.")
                         else:
                             print_warning(f"Could not fetch repositories for {org}: {error_msg}")
-                        repos[org] = []
                         
                 except Exception as e:
                     print_warning(f"Error fetching repositories for {org}: {e}")
-                    repos[org] = []
+            
+            if active_repo_count == 0:
+                logger.warning(f"⚠️  No repositories with activity since {self.since_date.strftime('%Y-%m-%d')} found in {org}")
+            else:
+                logger.info(f"✅ Found {active_repo_count} active repositories in {org}")
         
         return repos
     
@@ -1539,37 +1702,61 @@ Example:
     
     async def _discover_contributors(self, repos: Dict[str, List[str]], 
                                    progress: Progress, task_id) -> Set[str]:
-        """Discover all contributors across repositories"""
+        """Discover contributors who have been active in the time period"""
         contributors = set()
+        
+        if self.use_pygithub:
+            return self._discover_contributors_pygithub(repos, progress, task_id)
         
         # Use semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(self.args.max_workers)
         
-        async def get_repo_contributors(org: str, repo: str):
+        async def get_active_repo_contributors(org: str, repo: str):
             async with semaphore:
                 try:
+                    # Get commits since the date to find active contributors
+                    since_str = self.since_date.strftime('%Y-%m-%dT%H:%M:%SZ')
                     result = await self.git_ops.run_command([
-                        'gh', 'api', f'/repos/{org}/{repo}/contributors', '--paginate'
+                        'gh', 'api', f'/repos/{org}/{repo}/commits',
+                        '-F', f'since={since_str}',
+                        '--paginate'
                     ])
                     
                     if result.success:
-                        contrib_data = json.loads(result.stdout)
-                        repo_contributors = {contrib.get('login') for contrib in contrib_data 
-                                           if contrib.get('login')}
+                        commits_data = json.loads(result.stdout)
+                        repo_contributors = set()
+                        
+                        # Extract unique authors from commits
+                        for commit in commits_data:
+                            author = commit.get('author')
+                            if author and author.get('login'):
+                                repo_contributors.add(author['login'])
+                            
+                            # Also check commit author info
+                            commit_author = commit.get('commit', {}).get('author')
+                            if commit_author:
+                                # Try to get GitHub username from committer
+                                committer = commit.get('committer')
+                                if committer and committer.get('login'):
+                                    repo_contributors.add(committer['login'])
+                        
+                        if repo_contributors:
+                            logger.debug(f"Found {len(repo_contributors)} active contributors in {org}/{repo}")
+                        
                         progress.advance(task_id)
                         return repo_contributors
                     
                 except Exception as e:
-                    logger.warning(f"Error getting contributors for {org}/{repo}: {e}")
+                    logger.warning(f"Error getting active contributors for {org}/{repo}: {e}")
                 
                 progress.advance(task_id)
                 return set()
         
-        # Collect all contributors in parallel
+        # Collect all active contributors in parallel
         tasks = []
         for org, repo_list in repos.items():
             for repo in repo_list:
-                task = get_repo_contributors(org, repo)
+                task = get_active_repo_contributors(org, repo)
                 tasks.append(task)
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1578,7 +1765,86 @@ Example:
             if isinstance(result, set):
                 contributors.update(result)
         
-        logger.info(f"Discovered {len(contributors)} unique contributors")
+        # Filter out excluded contributors
+        if hasattr(self.args, 'exclude_contributors') and self.args.exclude_contributors:
+            excluded = set(self.args.exclude_contributors)
+            before_count = len(contributors)
+            contributors = contributors - excluded
+            if before_count > len(contributors):
+                logger.info(f"Excluded {before_count - len(contributors)} contributors from analysis")
+        
+        logger.info(f"Discovered {len(contributors)} unique active contributors since {self.since_date.strftime('%Y-%m-%d')}")
+        return contributors
+    
+    def _discover_contributors_pygithub(self, repos: Dict[str, List[str]], 
+                                       progress: Progress, task_id) -> Set[str]:
+        """Discover active contributors using PyGithub"""
+        contributors = set()
+        
+        # PyGithub expects timezone-aware datetime
+        since_date = self.since_date
+        if since_date.tzinfo is None:
+            since_date = since_date.replace(tzinfo=timezone.utc)
+        
+        for org_name, repo_list in repos.items():
+            try:
+                org = self.github_client.get_organization(org_name)
+                
+                for repo_name in repo_list:
+                    try:
+                        repo = org.get_repo(repo_name)
+                        
+                        # Get commits since the date
+                        try:
+                            commit_count = 0
+                            for commit in repo.get_commits(since=since_date):
+                                commit_count += 1
+                                
+                                # Debug: Check actual commit date
+                                commit_date = commit.commit.author.date
+                                if self.args.debug_api:
+                                    logger.info(f"Commit in {org_name}/{repo_name}: {commit.sha[:7]} by {commit.author.login if commit.author else 'unknown'} on {commit_date}")
+                                
+                                # Double-check the date is actually within our range
+                                if commit_date < since_date:
+                                    logger.warning(f"BUG: Got commit from {commit_date} which is before our since_date {since_date} in {org_name}/{repo_name}")
+                                    continue
+                                
+                                # Get author (GitHub user) if available
+                                if commit.author:
+                                    contributors.add(commit.author.login)
+                                    if self.args.debug_api:
+                                        logger.info(f"Added contributor: {commit.author.login} from commit on {commit_date}")
+                                
+                                # Also check committer
+                                if commit.committer and commit.committer.login != 'web-flow':
+                                    # web-flow is GitHub's merge commit bot
+                                    contributors.add(commit.committer.login)
+                            
+                            if self.args.debug_api and commit_count > 0:
+                                logger.info(f"Found {commit_count} commits in {org_name}/{repo_name} since {since_date}")
+                        except GithubException as e:
+                            if "Git Repository is empty" not in str(e):
+                                logger.debug(f"Error getting commits for {org_name}/{repo_name}: {e}")
+                        
+                        progress.advance(task_id)
+                        
+                    except GithubException as e:
+                        logger.warning(f"Error accessing {org_name}/{repo_name}: {e}")
+                        progress.advance(task_id)
+                        
+            except GithubException as e:
+                logger.error(f"Error accessing organization {org_name}: {e}")
+        
+        # Filter out excluded contributors
+        if hasattr(self.args, 'exclude_contributors') and self.args.exclude_contributors:
+            excluded = set(self.args.exclude_contributors)
+            before_count = len(contributors)
+            contributors = contributors - excluded
+            if before_count > len(contributors):
+                logger.info(f"Excluded {before_count - len(contributors)} contributors from analysis")
+        
+        logger.info(f"Discovered {len(contributors)} unique active contributors since {since_date.strftime('%Y-%m-%d')}")
         return contributors
     
     async def _collect_contributor_data(self, contributors: Set[str], repos: Dict[str, List[str]], 
@@ -1619,7 +1885,7 @@ Example:
                 except Exception as e:
                     logger.warning(f"Error collecting data for {username}: {e}")
                     progress.advance(task_id)
-            
+        
             # Process batch
             tasks = [process_contributor(username) for username in batch]
             await asyncio.gather(*tasks, return_exceptions=True)
