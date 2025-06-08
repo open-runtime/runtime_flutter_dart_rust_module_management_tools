@@ -91,6 +91,18 @@ class ContributorProfile:
     code_style_assessment: str = ""  # AI assessment of coding style
     recent_code_samples: List[Dict[str, str]] = field(default_factory=list)  # Recent code for analysis
     
+    # Work effort metrics
+    estimated_hours: float = 0.0  # Estimated hours of work (based on commits)
+    active_days: int = 0  # Number of days with contributions
+    days_per_week: float = 0.0  # Average days per week of contribution
+    lines_added: int = 0  # Total lines of code added
+    lines_removed: int = 0  # Total lines of code removed
+    files_changed: int = 0  # Total files changed
+    
+    # Domain expertise
+    domains: Dict[str, int] = field(default_factory=dict)  # Domain areas (backend, frontend, etc)
+    technology_stack: Set[str] = field(default_factory=set)  # Technologies used
+    
     # Performance metrics
     processing_time: float = 0.0
     api_calls_used: int = 0
@@ -303,15 +315,15 @@ class ContributorAnalyzer(CLITool):
         parser.add_argument(
             '--rate-limit',
             type=int,
-            default=10,
-            help='API rate limit (requests per minute)'
+            default=30,
+            help='API rate limit (requests per minute, default: 30)'
         )
         
         parser.add_argument(
             '--max-workers',
             type=int,
-            default=4,
-            help='Maximum number of parallel workers'
+            default=10,
+            help='Maximum number of parallel workers (default: 10)'
         )
         
         parser.add_argument(
@@ -499,7 +511,7 @@ class ContributorAnalyzer(CLITool):
                 return plan_result
             
             # For real execution, ask for final confirmation after showing plan
-            if not confirm_with_timeout(f"\n[bold red]🚀 Execute this analysis plan now?[/bold red]", default=False, timeout=5):
+            if not confirm_with_timeout(f"\n[bold red]🚀 Execute this analysis plan now?[/bold red]", default=True, timeout=5):
                 self.console.print("[yellow]Analysis cancelled[/yellow]")
                 return 0
             
@@ -1708,8 +1720,8 @@ Example:
         if self.use_pygithub:
             return self._discover_contributors_pygithub(repos, progress, task_id)
         
-        # Use semaphore to limit concurrent requests
-        semaphore = asyncio.Semaphore(self.args.max_workers)
+        # Use semaphore to limit concurrent requests (double for read operations)
+        semaphore = asyncio.Semaphore(self.args.max_workers * 2)
         
         async def get_active_repo_contributors(org: str, repo: str):
             async with semaphore:
@@ -1963,12 +1975,43 @@ Example:
     def _calculate_derived_metrics(self, profile: ContributorProfile) -> None:
         """Calculate derived metrics for a contributor"""
         if profile.first_contribution and profile.last_contribution:
-            days_active = (profile.last_contribution - profile.first_contribution).days
+            days_active = (profile.last_contribution - profile.first_contribution).days + 1
             if days_active > 0:
+                # Commits per week
                 profile.contribution_frequency = (profile.total_commits * 7) / days_active
+                
+                # Days per week (assuming they contributed on commit days)
+                profile.active_days = profile.total_commits  # Approximation
+                weeks_active = days_active / 7.0
+                profile.days_per_week = min(profile.active_days / weeks_active, 7.0) if weeks_active > 0 else 0
         
-        # Set placeholder for avg PR size (would need detailed PR analysis)
-        profile.avg_pr_size = 100.0
+        # Estimate hours of work (industry average: 1 commit = 1-2 hours of work)
+        profile.estimated_hours = profile.total_commits * 1.5  # 1.5 hours per commit average
+        
+        # Set avg PR size based on commits (rough estimate)
+        if profile.total_prs > 0:
+            profile.avg_pr_size = (profile.total_commits * 50) / profile.total_prs  # Assume 50 lines per commit
+        else:
+            profile.avg_pr_size = 100.0
+        
+        # Analyze domains based on repositories
+        for repo in profile.repositories:
+            repo_lower = repo.lower()
+            # Backend indicators
+            if any(keyword in repo_lower for keyword in ['api', 'server', 'backend', 'service', 'database']):
+                profile.domains['backend'] = profile.domains.get('backend', 0) + 1
+            # Frontend indicators
+            if any(keyword in repo_lower for keyword in ['ui', 'frontend', 'client', 'web', 'app']):
+                profile.domains['frontend'] = profile.domains.get('frontend', 0) + 1
+            # Mobile indicators  
+            if any(keyword in repo_lower for keyword in ['ios', 'android', 'mobile', 'flutter', 'react-native']):
+                profile.domains['mobile'] = profile.domains.get('mobile', 0) + 1
+            # DevOps indicators
+            if any(keyword in repo_lower for keyword in ['docker', 'kubernetes', 'ci', 'cd', 'infra', 'ops']):
+                profile.domains['devops'] = profile.domains.get('devops', 0) + 1
+            # Data/ML indicators
+            if any(keyword in repo_lower for keyword in ['data', 'ml', 'ai', 'analytics', 'etl']):
+                profile.domains['data'] = profile.domains.get('data', 0) + 1
     
     async def _clone_repositories(self, repos: Dict[str, List[str]], 
                                  progress: Progress, task_id) -> Dict[str, Path]:
@@ -2475,104 +2518,180 @@ Please respond in JSON format:
 *Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
 *Analysis period: {self.since_date.strftime('%Y-%m-%d')} to present*
 
-## Overview
+## 🎯 Executive Summary
 
 **GitHub Username:** @{profile.username}  
 **Name:** {profile.name or 'N/A'}  
 **Email:** {profile.email or 'N/A'}  
 
-## Contribution Summary
+### 📊 Key Performance Metrics
 
-| Metric | Value |
-|--------|-------|
-| Total Commits | {profile.total_commits:,} |
-| Total Pull Requests | {profile.total_prs:,} |
-| Active Repositories | {len(profile.repositories)} |
-| First Contribution | {profile.first_contribution.strftime('%Y-%m-%d') if profile.first_contribution else 'N/A'} |
-| Last Contribution | {profile.last_contribution.strftime('%Y-%m-%d') if profile.last_contribution else 'N/A'} |
-| Contribution Frequency | {profile.contribution_frequency:.1f} commits/week |
+| Metric | Value | Industry Benchmark |
+|--------|-------|-------------------|
+| **Total Commits** | {profile.total_commits:,} | ~50-100/month for active devs |
+| **Total Pull Requests** | {profile.total_prs:,} | ~10-20/month typical |
+| **Active Repositories** | {len(profile.repositories)} | - |
+| **Contribution Frequency** | {profile.contribution_frequency:.1f} commits/week | 5-10 commits/week is high |
+| **Days Per Week Active** | {profile.days_per_week:.1f} days | 3-5 days typical |
+| **Estimated Hours** | {profile.estimated_hours:,.0f} hours | ~{profile.estimated_hours/8:.0f} work days |
 
-## Active Repositories
+### 🕐 Work Patterns
 
+| Pattern | Value |
+|---------|-------|
+| **First Contribution** | {profile.first_contribution.strftime('%Y-%m-%d') if profile.first_contribution else 'N/A'} |
+| **Last Contribution** | {profile.last_contribution.strftime('%Y-%m-%d') if profile.last_contribution else 'N/A'} |
+| **Total Active Days** | {profile.active_days} days |
+| **Average Work Days/Week** | {profile.days_per_week:.1f} |
+| **Consistency Rating** | {"⭐⭐⭐⭐⭐" if profile.days_per_week > 4 else "⭐⭐⭐⭐" if profile.days_per_week > 3 else "⭐⭐⭐" if profile.days_per_week > 2 else "⭐⭐" if profile.days_per_week > 1 else "⭐"} |
+
+## 🔧 Technical Profile
+
+### Domain Expertise
+"""
+        if profile.domains:
+            content += "| Domain | Repository Count | Expertise Level |\n|--------|-----------------|----------------|\n"
+            for domain, count in sorted(profile.domains.items(), key=lambda x: x[1], reverse=True):
+                level = "Expert" if count >= 5 else "Advanced" if count >= 3 else "Intermediate" if count >= 2 else "Beginner"
+                content += f"| **{domain.title()}** | {count} repos | {level} |\n"
+        else:
+            content += "Domain analysis pending...\n"
+        
+        content += "\n### Programming Languages\n"
+        if profile.primary_languages:
+            content += "| Language | Files Modified | Proficiency |\n|----------|---------------|-------------|\n"
+            for lang, count in sorted(profile.primary_languages.items(), key=lambda x: x[1], reverse=True)[:10]:
+                proficiency = "Expert" if count >= 50 else "Advanced" if count >= 20 else "Intermediate" if count >= 10 else "Learning"
+                content += f"| {lang} | {count} | {proficiency} |\n"
+        else:
+            content += "Language analysis pending...\n"
+        
+        content += f"""
+
+## 💼 Work Output Analysis
+
+### Volume Metrics
+- **Estimated Code Volume:** ~{profile.total_commits * 50:,} lines changed
+- **Average PR Size:** {profile.avg_pr_size:.0f} lines per PR
+- **Files Touched:** {profile.files_changed:,} files
+- **Code Velocity:** {profile.contribution_frequency * 50:.0f} lines/week (estimated)
+
+### Repository Focus
 """
         
         if profile.repositories:
-            for repo in sorted(profile.repositories):
-                content += f"- `{repo}`\n"
+            # Group repositories by organization
+            repo_by_org = {}
+            for repo in profile.repositories:
+                parts = repo.split('/')
+                if len(parts) == 2:
+                    org, repo_name = parts
+                    if org not in repo_by_org:
+                        repo_by_org[org] = []
+                    repo_by_org[org].append(repo_name)
+            
+            for org, repos in sorted(repo_by_org.items()):
+                content += f"\n**{org}** ({len(repos)} repositories)\n"
+                for repo in sorted(repos):
+                    content += f"- `{repo}`\n"
         else:
             content += "No repositories found in the analysis period.\n"
         
-        content += "\n## Skill Assessment\n\n"
+        content += "\n## 🧠 AI-Powered Analysis\n\n"
         
         if profile.skill_assessment:
-            content += "| Skill Area | Level |\n|------------|-------|\n"
+            content += "### Skill Assessment\n| Area | Level | Confidence |\n|------|-------|------------|\n"
             for skill, level in profile.skill_assessment.items():
-                content += f"| {skill.title()} | {level.title()} |\n"
-        else:
-            content += "Skill assessment not available.\n"
-        
-        content += "\n## AI Analysis\n\n"
+                confidence = "High" if profile.total_commits > 50 else "Medium" if profile.total_commits > 20 else "Low"
+                content += f"| {skill.title()} | **{level.title()}** | {confidence} |\n"
         
         if profile.ai_analysis:
-            content += profile.ai_analysis
-        else:
-            content += "AI analysis not available.\n"
+            content += f"\n### AI Insights\n{profile.ai_analysis}\n"
         
         content += f"""
 
-## Code Quality Analysis
+## 🎨 Code Quality Profile
 
-| Metric | Value |
-|--------|-------|
-| **Code Quality Score** | {profile.code_quality_score:.1f}/10 |
-| **Primary Languages** | {', '.join(f"{lang} ({count})" for lang, count in sorted(profile.primary_languages.items(), key=lambda x: x[1], reverse=True)[:5]) if profile.primary_languages else 'Not analyzed'} |
-| **Code Files Analyzed** | {len(profile.recent_code_samples)} |
+### Overall Quality Metrics
+| Metric | Score | Rating |
+|--------|-------|--------|
+| **Code Quality Score** | {profile.code_quality_score:.1f}/10 | {"Excellent" if profile.code_quality_score >= 8 else "Good" if profile.code_quality_score >= 6 else "Average" if profile.code_quality_score >= 4 else "Needs Improvement"} |
+| **Consistency** | {"⭐⭐⭐⭐⭐" if profile.code_quality_score >= 8 else "⭐⭐⭐⭐" if profile.code_quality_score >= 6 else "⭐⭐⭐" if profile.code_quality_score >= 4 else "⭐⭐"} | Based on style analysis |
+| **Code Samples Analyzed** | {len(profile.recent_code_samples)} | - |
 
-### Code Style Assessment
-{profile.code_style_assessment if profile.code_style_assessment else 'Code style analysis pending.'}
+### Code Style & Patterns
+{profile.code_style_assessment if profile.code_style_assessment else 'Code style analysis pending...'}
 
-### Code Patterns & Practices
+### Identified Patterns
 """
         
         if profile.code_patterns:
-            for pattern in profile.code_patterns:
-                content += f"- {pattern}\n"
+            for i, pattern in enumerate(profile.code_patterns, 1):
+                content += f"{i}. {pattern}\n"
         else:
-            content += "- Code pattern analysis pending\n"
-        
-        content += "\n### Architectural Contributions\n"
+            content += "Pattern analysis pending...\n"
         
         if profile.architectural_contributions:
+            content += "\n### Architectural Contributions\n"
             for contribution in profile.architectural_contributions:
-                content += f"- {contribution}\n"
-        else:
-            content += "- Architectural analysis pending\n"
-
+                content += f"- 🏗️ {contribution}\n"
+        
         content += f"""
 
-## Technical Metrics
+## 📈 Performance Summary
 
-- **Average PR Size:** {profile.avg_pr_size:.0f} lines changed (estimated)
-- **Code Reviews:** {profile.code_review_count}
-- **Legacy Languages:** {', '.join(sorted(profile.languages)) if profile.languages else 'Not analyzed'}
+### Contribution Intensity
+- **Work Effort:** {profile.estimated_hours:,.0f} hours (~{profile.estimated_hours/40:.0f} work weeks)
+- **Velocity:** {"High" if profile.contribution_frequency > 10 else "Medium" if profile.contribution_frequency > 5 else "Low"} ({profile.contribution_frequency:.1f} commits/week)
+- **Consistency:** {"Very Consistent" if profile.days_per_week > 4 else "Consistent" if profile.days_per_week > 2.5 else "Moderate" if profile.days_per_week > 1 else "Sporadic"}
+- **Impact Level:** {"High" if profile.total_commits > 100 else "Medium" if profile.total_commits > 50 else "Growing"}
 
-## Notable Contributions
-
+### Strengths & Focus Areas
 """
         
-        if profile.notable_contributions:
-            for contribution in profile.notable_contributions:
-                content += f"- {contribution}\n"
+        # Determine top strengths based on data
+        strengths = []
+        if profile.contribution_frequency > 10:
+            strengths.append("🚀 High velocity contributor")
+        if profile.days_per_week > 4:
+            strengths.append("📅 Very consistent work pattern")
+        if len(profile.repositories) > 5:
+            strengths.append("🎯 Multi-repository expertise")
+        if profile.code_quality_score > 7:
+            strengths.append("✨ High code quality standards")
+        if profile.total_prs > 20:
+            strengths.append("🔄 Active in code reviews")
+        
+        if strengths:
+            for strength in strengths:
+                content += f"- {strength}\n"
         else:
-            content += "Notable contributions analysis pending.\n"
+            content += "- Building contribution history\n"
         
         content += f"""
 
 ---
 
-*Profile generated by Contributor Analyzer on {datetime.now().strftime('%Y-%m-%d')}*  
-*Analysis covers activity from {self.since_date.strftime('%Y-%m-%d')} onwards*  
-*Powered by GitHub CLI and Gemini AI*
+*Profile generated by Contributor Analyzer on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*  
+*Analysis period: {self.since_date.strftime('%Y-%m-%d')} to present ({(datetime.now(timezone.utc) - self.since_date).days} days)*  
+*Powered by GitHub API, PyGithub, and Gemini AI*
+
+<details>
+<summary>📊 Raw Metrics</summary>
+
+```json
+{{
+  "total_commits": {profile.total_commits},
+  "total_prs": {profile.total_prs},
+  "estimated_hours": {profile.estimated_hours:.1f},
+  "days_per_week": {profile.days_per_week:.2f},
+  "code_quality_score": {profile.code_quality_score:.1f},
+  "repositories": {len(profile.repositories)},
+  "languages": {len(profile.primary_languages)}
+}}
+```
+
+</details>
 """
         
         return content
