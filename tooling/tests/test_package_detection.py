@@ -14,13 +14,16 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from tooling.cli.cli_utils import Colors
+    from tooling.cli.cli_utils import print_info, print_success, print_error, print_header, console
 except ImportError:
-    from cli.cli_utils import Colors
-
-def print_color(color, message):
-    """Print colored text"""
-    print(f"{color}{message}{Colors.NC}")
+    # Fallback for when cli_utils isn't available
+    def print_info(msg): print(f"ℹ {msg}")
+    def print_success(msg): print(f"✓ {msg}")
+    def print_error(msg): print(f"✗ {msg}")
+    def print_header(msg): print(f"\n{'='*60}\n{msg}\n{'='*60}\n")
+    class Console:
+        def print(self, msg, style=None): print(msg)
+    console = Console()
 
 try:
     from tooling.utils.package_utils import detect_package_names, get_package_info
@@ -134,7 +137,7 @@ edition = "2021"
         self.assertEqual(names.flutter_package_name, f"runtime_flutter_{project_name}")
         self.assertEqual(names.rust_package_name, f"runtime_rust_{project_name}")
         
-        print_color(Colors.GREEN, f"✓ Standard naming convention test passed for '{project_name}'")
+        print_success(f"Standard naming convention test passed for '{project_name}'")
     
     def test_custom_package_names(self):
         """Test detection with custom package names"""
@@ -162,7 +165,7 @@ edition = "2021"
         self.assertEqual(names.flutter_package_name, custom_flutter)
         self.assertEqual(names.rust_package_name, custom_rust)
         
-        print_color(Colors.GREEN, f"✓ Custom naming test passed for '{project_name}'")
+        print_success(f"Custom naming test passed for '{project_name}'")
     
     def test_missing_structure(self):
         """Test detection with missing directories/files"""
@@ -182,7 +185,7 @@ edition = "2021"
         self.assertEqual(names.root_package_name, project_name)
         self.assertEqual(names.dart_package_name, f"runtime_{project_name}")
         
-        print_color(Colors.GREEN, "✓ Missing structure test passed")
+        print_success("Missing structure test passed")
     
     def test_package_info_generation(self):
         """Test get_package_info() function"""
@@ -201,18 +204,18 @@ edition = "2021"
         self.assertEqual(names.flutter_package_name, f"runtime_flutter_{project_name}")
         self.assertEqual(names.rust_package_name, f"runtime_rust_{project_name}")
         
-        print_color(Colors.GREEN, f"✓ Package info generation test passed for '{project_name}'")
+        print_success(f"Package info generation test passed for '{project_name}'")
         
         # Get package info
-        print_color(Colors.BLUE, "\nGetting package configurations...")
+        print_info("Getting package configurations...")
         package_info = get_package_info()
         
-        print_color(Colors.GREEN, "\n✓ Package configurations:")
+        print_success("Package configurations:")
         for key, info in package_info.items():
-            print_color(Colors.BLUE, f"\n  {key}:")
-            print_color(Colors.GRAY, f"    Name:        {info.name}")
-            print_color(Colors.GRAY, f"    Changelog:   {info.changelog}")
-            print_color(Colors.GRAY, f"    Description: {info.description}")
+            print_info(f"\n  {key}:")
+            console.print(f"    Name:        {info.name}", style="dim")
+            console.print(f"    Changelog:   {info.changelog}", style="dim")
+            console.print(f"    Description: {info.description}", style="dim")
     
     def test_special_characters_in_name(self):
         """Test with special characters in project name"""
@@ -228,21 +231,21 @@ edition = "2021"
         self.assertEqual(names.root_package_name, expected_base)
         self.assertEqual(names.dart_package_name, f"runtime_{expected_base}")
         
-        print_color(Colors.GREEN, "✓ Special characters test passed")
+        print_success("Special characters test passed")
 
 
 def run_demo():
     """Run a demo showing package detection in action"""
-    print_color(Colors.PURPLE, "\n" + "="*60)
-    print_color(Colors.PURPLE, "Package Detection Demo")
-    print_color(Colors.PURPLE, "="*60 + "\n")
+    console.print("\n" + "="*60, style="magenta")
+    console.print("Package Detection Demo", style="magenta")
+    console.print("="*60 + "\n", style="magenta")
     
     # Create a temporary demo project
     with tempfile.TemporaryDirectory(prefix="demo_") as temp_dir:
         project_name = "example_project"
         project_dir = Path(temp_dir) / project_name
         
-        print_color(Colors.BLUE, f"Creating demo project: {project_name}")
+        print_info(f"Creating demo project: {project_name}")
         
         # Create structure
         project_dir.mkdir()
@@ -275,30 +278,30 @@ version = "0.0.1"
         
         try:
             # Detect names
-            print_color(Colors.BLUE, "\nDetecting package names...")
+            print_info("Detecting package names...")
             names = detect_package_names()
             
-            print_color(Colors.GREEN, "\n✓ Package names detected:")
-            print_color(Colors.GRAY, f"  Root:    {names.root_package_name}")
-            print_color(Colors.GRAY, f"  Dart:    {names.dart_package_name}")
-            print_color(Colors.GRAY, f"  Flutter: {names.flutter_package_name}")
-            print_color(Colors.GRAY, f"  Rust:    {names.rust_package_name}")
+            print_success("Package names detected:")
+            console.print(f"  Root:    {names.root_package_name}", style="dim")
+            console.print(f"  Dart:    {names.dart_package_name}", style="dim")
+            console.print(f"  Flutter: {names.flutter_package_name}", style="dim")
+            console.print(f"  Rust:    {names.rust_package_name}", style="dim")
             
             # Get package info
-            print_color(Colors.BLUE, "\nGetting package configurations...")
+            print_info("Getting package configurations...")
             package_info = get_package_info()
             
-            print_color(Colors.GREEN, "\n✓ Package configurations:")
+            print_success("Package configurations:")
             for key, info in package_info.items():
-                print_color(Colors.BLUE, f"\n  {key}:")
-                print_color(Colors.GRAY, f"    Name:        {info.name}")
-                print_color(Colors.GRAY, f"    Changelog:   {info.changelog}")
-                print_color(Colors.GRAY, f"    Description: {info.description}")
+                print_info(f"\n  {key}:")
+                console.print(f"    Name:        {info.name}", style="dim")
+                console.print(f"    Changelog:   {info.changelog}", style="dim")
+                console.print(f"    Description: {info.description}", style="dim")
                 
         finally:
             os.chdir(original_cwd)
     
-    print_color(Colors.PURPLE, "\n" + "="*60)
+    console.print("\n" + "="*60, style="magenta")
 
 
 if __name__ == "__main__":
@@ -307,8 +310,8 @@ if __name__ == "__main__":
         run_demo()
     else:
         # Run unit tests
-        print_color(Colors.PURPLE, "Running Package Detection Unit Tests")
-        print_color(Colors.PURPLE, "="*50)
+        console.print("Running Package Detection Unit Tests", style="magenta")
+        console.print("="*50, style="magenta")
         print()
         
         # Run tests

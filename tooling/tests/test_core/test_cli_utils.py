@@ -16,8 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from cli.cli_utils import (
     setup_cli_logging, add_common_arguments,
     print_info, print_success, print_error, print_warning,
-    print_header, print_section, CLIProgressLogger,
-    confirm_action
+    print_header, print_section, CLIProgressLogger
 )
 from tooling.core.base_config import get_config
 
@@ -257,90 +256,6 @@ class TestCLIProgressLogger:
         """Test that CLIProgressLogger inherits from ProgressLogger"""
         from tooling.core.logging import ProgressLogger
         assert issubclass(CLIProgressLogger, ProgressLogger)
-
-
-class TestConfirmAction:
-    """Test user confirmation function"""
-    
-    @patch('tooling.core.base_config.get_config')
-    @patch('rich.prompt.Confirm.ask', return_value=True)
-    def test_confirm_action_yes(self, mock_confirm, mock_get_config):
-        """Test confirmation with yes response"""
-        mock_config = MagicMock()
-        mock_config.dry_run = False
-        mock_get_config.return_value = mock_config
-        
-        result = confirm_action("Continue?")
-        assert result == True
-        mock_confirm.assert_called_once_with("Continue?", default=False)
-    
-    @patch('tooling.core.base_config.get_config')
-    @patch('rich.prompt.Confirm.ask', return_value=True)
-    def test_confirm_action_yes_uppercase(self, mock_confirm, mock_get_config):
-        """Test confirmation with uppercase yes"""
-        mock_config = MagicMock()
-        mock_config.dry_run = False
-        mock_get_config.return_value = mock_config
-        
-        result = confirm_action("Continue?")
-        assert result == True
-    
-    @patch('tooling.core.base_config.get_config')
-    @patch('rich.prompt.Confirm.ask', return_value=True)
-    def test_confirm_action_yes_full(self, mock_confirm, mock_get_config):
-        """Test confirmation with full 'yes'"""
-        mock_config = MagicMock()
-        mock_config.dry_run = False
-        mock_get_config.return_value = mock_config
-        
-        result = confirm_action("Continue?")
-        assert result == True
-    
-    @patch('tooling.core.base_config.get_config')
-    @patch('rich.prompt.Confirm.ask', return_value=False)
-    def test_confirm_action_no(self, mock_confirm, mock_get_config):
-        """Test confirmation with no response"""
-        mock_config = MagicMock()
-        mock_config.dry_run = False
-        mock_get_config.return_value = mock_config
-        
-        result = confirm_action("Continue?")
-        assert result == False
-    
-    @patch('tooling.core.base_config.get_config')
-    @patch('rich.prompt.Confirm.ask', return_value=False)
-    def test_confirm_action_default_no(self, mock_confirm, mock_get_config):
-        """Test confirmation with empty response (default no)"""
-        mock_config = MagicMock()
-        mock_config.dry_run = False
-        mock_get_config.return_value = mock_config
-        
-        result = confirm_action("Continue?")
-        assert result == False
-        mock_confirm.assert_called_once_with("Continue?", default=False)
-    
-    @patch('tooling.core.base_config.get_config')
-    @patch('rich.prompt.Confirm.ask', return_value=True)
-    def test_confirm_action_default_yes(self, mock_confirm, mock_get_config):
-        """Test confirmation with empty response (default yes)"""
-        mock_config = MagicMock()
-        mock_config.dry_run = False
-        mock_get_config.return_value = mock_config
-        
-        result = confirm_action("Continue?", default=True)
-        assert result == True
-        mock_confirm.assert_called_once_with("Continue?", default=True)
-    
-    @patch('tooling.core.base_config.get_config')
-    @patch('rich.prompt.Confirm.ask', return_value=False)
-    def test_confirm_action_invalid(self, mock_confirm, mock_get_config):
-        """Test confirmation with invalid response"""
-        mock_config = MagicMock()
-        mock_config.dry_run = False
-        mock_get_config.return_value = mock_config
-        
-        result = confirm_action("Continue?")
-        assert result == False  # Invalid input defaults to no
 
 
 class TestCLIUtilsIntegration:

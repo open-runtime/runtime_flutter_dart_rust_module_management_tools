@@ -5,7 +5,7 @@
 
 # Variables
 PYTHON := python3
-BINARY_NAME := rt
+BINARY_NAME := runtime_fdr_management_tools
 VERSION := $(shell grep version pyproject.toml | head -1 | cut -d'"' -f2)
 
 all: build-macos
@@ -75,13 +75,13 @@ coverage:
 
 # Quick commands
 commit:
-	./rt commit
+	./runtime_fdr_management_tools commit
 
 release:
-	./rt release
+	./runtime_fdr_management_tools release
 
 changelog:
-	./rt changelog
+	./runtime_fdr_management_tools changelog
 
 # Help
 help:

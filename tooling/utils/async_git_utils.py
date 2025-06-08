@@ -32,15 +32,16 @@ class AsyncGitOperations:
         self.timeout = timeout
         self._semaphore = asyncio.Semaphore(10)  # Limit concurrent git operations
     
-    async def run_command(self, cmd: List[str]) -> AsyncGitResult:
+    async def run_command(self, cmd: List[str], cwd: Optional[Path] = None) -> AsyncGitResult:
         """Run git command asynchronously"""
         async with self._semaphore:
             try:
+                work_dir = cwd or self.cwd
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    cwd=self.cwd
+                    cwd=work_dir
                 )
                 
                 stdout, stderr = await asyncio.wait_for(
@@ -180,6 +181,74 @@ class AsyncGitOperations:
         cmd = ["git", "ls-files", "--error-unmatch", path]
         result = await self.run_command(cmd)
         return result.success
+    
+    async def get_status(self) -> str:
+        """Get git status"""
+        result = await self.run_command(["git", "status"])
+        return result.stdout
+    
+    async def get_diff(self, cached: bool = False) -> str:
+        """Get git diff"""
+        cmd = ["git", "diff"]
+        if cached:
+            cmd.append("--cached")
+        result = await self.run_command(cmd)
+        return result.stdout
+    
+    async def get_log(self, limit: int = 10) -> str:
+        """Get git log"""
+        cmd = ["git", "log", f"-{limit}", "--oneline"]
+        result = await self.run_command(cmd)
+        return result.stdout
+    
+    async def get_branches(self, remote: bool = False) -> List[str]:
+        """Get git branches"""
+        cmd = ["git", "branch"]
+        if remote:
+            cmd.append("-r")
+        result = await self.run_command(cmd)
+        
+        if result.success and result.stdout:
+            # Parse branch names, removing the current branch marker (*)
+            branches = []
+            for line in result.stdout.splitlines():
+                branch = line.strip()
+                if branch.startswith('*'):
+                    branch = branch[1:].strip()
+                branches.append(branch)
+            return branches
+        return []
+    
+    async def get_remotes(self) -> List[str]:
+        """Get git remotes"""
+        result = await self.run_command(["git", "remote"])
+        if result.success and result.stdout:
+            return result.stdout.splitlines()
+        return []
+    
+    async def checkout(self, branch: str) -> None:
+        """Checkout a branch"""
+        result = await self.run_command(["git", "checkout", branch])
+        if not result.success:
+            raise RuntimeError(f"Failed to checkout {branch}: {result.stderr}")
+    
+    async def pull(self, remote: str = "origin", branch: Optional[str] = None) -> None:
+        """Pull from remote"""
+        cmd = ["git", "pull", remote]
+        if branch:
+            cmd.append(branch)
+        result = await self.run_command(cmd)
+        if not result.success:
+            raise RuntimeError(f"Failed to pull: {result.stderr}")
+    
+    async def push(self, remote: str = "origin", branch: Optional[str] = None) -> None:
+        """Push to remote"""
+        cmd = ["git", "push", remote]
+        if branch:
+            cmd.append(branch)
+        result = await self.run_command(cmd)
+        if not result.success:
+            raise RuntimeError(f"Failed to push: {result.stderr}")
 
 
 class GitBatchProcessor:
@@ -188,6 +257,61 @@ class GitBatchProcessor:
     def __init__(self, batch_size: int = 50):
         self.batch_size = batch_size
         self.git = AsyncGitOperations()
+        self.git_ops = self.git  # Alias for tests
+    
+    async def get_file_statuses(self, files: List[str]) -> Dict[str, str]:
+        """Get git status for multiple files in parallel"""
+        tasks = []
+        for file in files:
+            task = self.git.run_command(["git", "status", "--porcelain", file])
+            tasks.append(task)
+        
+        results = await asyncio.gather(*tasks)
+        
+        statuses = {}
+        for file, result in zip(files, results):
+            if result.success:
+                statuses[file] = result.stdout if result.stdout else "unmodified"
+            else:
+                statuses[file] = "error"
+        
+        return statuses
+    
+    async def get_file_diffs(self, files: List[str]) -> Dict[str, str]:
+        """Get diffs for multiple files in parallel"""
+        tasks = []
+        for file in files:
+            task = self.git.run_command(["git", "diff", file])
+            tasks.append(task)
+        
+        results = await asyncio.gather(*tasks)
+        
+        diffs = {}
+        for file, result in zip(files, results):
+            if result.success:
+                diffs[file] = result.stdout
+            else:
+                diffs[file] = ""
+        
+        return diffs
+    
+    async def get_file_histories(self, files: List[str], limit: int = 10) -> Dict[str, str]:
+        """Get commit histories for multiple files in parallel"""
+        tasks = []
+        for file in files:
+            task = self.git.run_command(["git", "log", f"-{limit}", "--oneline", "--", file])
+            tasks.append(task)
+        
+        results = await asyncio.gather(*tasks)
+        
+        histories = {}
+        for file, result in zip(files, results):
+            if result.success:
+                histories[file] = result.stdout
+            else:
+                histories[file] = ""
+        
+        return histories
     
     async def process_commits_in_batches(
         self,

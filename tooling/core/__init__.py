@@ -33,6 +33,17 @@ from .performance import (
     get_performance_stats,
     print_performance_report
 )
+
+# Data models
+from .models import (
+    AnalysisMode,
+    ConventionalCommit,
+    GitCommit,
+    VersionEntry,
+    AnalysisMetrics,
+    CONVENTIONAL_TYPES,
+    CHANGELOG_SECTIONS
+)
 # AI client (optional - requires google-generativeai)
 try:
     from .ai_client import GeminiClient, get_default_client
@@ -69,6 +80,15 @@ __all__ = [
     'measure_operation', 
     'get_performance_stats',
     'print_performance_report',
+    
+    # Data Models
+    'AnalysisMode',
+    'ConventionalCommit',
+    'GitCommit',
+    'VersionEntry',
+    'AnalysisMetrics',
+    'CONVENTIONAL_TYPES',
+    'CHANGELOG_SECTIONS',
     
     # AI Client (optional)
     'GeminiClient',

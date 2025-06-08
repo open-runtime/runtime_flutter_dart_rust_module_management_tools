@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial release of Runtime FDR Module Tools
-- Unified CLI interface with `runtime_fdr_module_tools` command
+- Unified CLI interface with `runtime_fdr_management_tools` command
 - AI-powered commit message generation (fast and detailed modes)
 - Automated changelog management across multiple packages
 - Complete release workflow automation
@@ -20,8 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation and setup guides
 
 ### Changed
-- Renamed package from `runtime-fdr-pkg-tools` to `runtime-fdr-module-tools`
-- Updated CLI command from `runtime_fdr_tools` to `runtime_fdr_module_tools`
+- Renamed package from `runtime_frd_management_tools` to `runtime-fdr-module-tools`
+- Updated CLI command from `runtime_fdr_tools` to `runtime_fdr_management_tools`
 - Modernized dependencies to latest stable versions
 - Enhanced Python version support (3.8+)
 

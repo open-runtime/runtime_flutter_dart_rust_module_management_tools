@@ -30,7 +30,7 @@ from tooling.core.imports import setup_imports
 setup_imports()
 
 from tooling.core.logging import setup_logging, get_logger, ProgressLogger
-from tooling.core.base_config import get_config
+from tooling.core.config_manager import get_config as get_runtime_config
 
 # Create a shared console instance
 console = Console()
@@ -98,8 +98,8 @@ def handle_errors(func: Callable) -> Callable:
             raise
         except Exception as e:
             console.print(f"[red]✗ Error: {e}[/red]")
-            config = get_config()
-            if config.debug or config.verbose:
+            config = get_runtime_config()
+            if config.development.debug or config.development.verbose:
                 console.print_exception(show_locals=True)
             return 1
     return wrapper
@@ -127,8 +127,8 @@ def setup_cli_logging(
     elif hasattr(args, 'verbose') and args.verbose:
         level = "INFO"
     else:
-        config = get_config()
-        level = config.log_level.value
+        config = get_runtime_config()
+        level = config.development.log_level
     
     # Setup logging
     logger = setup_logging(
@@ -188,6 +188,11 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
         type=str,
         help='Path to configuration file'
     )
+    config_group.add_argument(
+        '--any',
+        action='store_true',
+        help='Skip project structure validation (allow running from any directory)'
+    )
 
 
 def add_git_arguments(parser: argparse.ArgumentParser) -> None:
@@ -225,15 +230,7 @@ def add_ai_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-# Legacy output functions (kept for backward compatibility)
-def print_color(color: str, text: str) -> None:
-    """Print colored text to console (legacy function - use console.print instead)"""
-    if Colors._enabled and color.startswith('\033'):
-        # Old ANSI style
-        print(f"{color}{text}{Colors.NC}")
-    else:
-        # New Rich style
-        console.print(text, style=color)
+# Legacy output functions removed - use Rich-based functions instead
 
 
 def print_error(message: str) -> None:
@@ -340,8 +337,8 @@ def confirm(prompt: str, default: bool = False) -> bool:
     from rich.prompt import Confirm
     
     # Check if in dry-run mode
-    config = get_config()
-    if config.dry_run:
+    config = get_runtime_config()
+    if config.development.dry_run:
         console.print(f"[dim]DRY RUN: Would ask: {prompt}[/dim]")
         return False
     
@@ -395,18 +392,7 @@ def select_choice(message: str, choices: List[str], default: Optional[str] = Non
         console.print("[red]Invalid selection, please try again[/red]")
 
 
-# Backward compatibility helpers
-def confirm_action(prompt: str, default: bool = False) -> bool:
-    """Legacy function - use confirm() instead"""
-    return confirm(prompt, default)
-
-
-def select_choice_legacy(message: str, choices: List[str]) -> Optional[str]:
-    """Legacy function - use select_choice() instead"""
-    try:
-        return select_choice(message, choices)
-    except KeyboardInterrupt:
-        return None
+# Backward compatibility helpers removed - use new functions directly
 
 
 class CLIProgressLogger(ProgressLogger):
@@ -416,8 +402,8 @@ class CLIProgressLogger(ProgressLogger):
     
     def __init__(self, logger: Any, task_name: str, show_progress: bool = True):
         super().__init__(logger, task_name)
-        config = get_config()
-        self.show_progress = show_progress and not config.debug
+        config = get_runtime_config()
+        self.show_progress = show_progress and not config.development.debug
         self.progress = None
         self.task_id = None
         
@@ -556,7 +542,6 @@ __all__ = [
     'handle_errors',
     'setup_cli_logging',
     'add_common_arguments',
-    'print_color',
     'print_error',
     'print_success',
     'print_warning',

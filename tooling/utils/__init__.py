@@ -88,23 +88,19 @@ from .changelog_utils import (
 
 # Changelog submodule
 from .changelog import (
-    # From models
+    # From git_operations
+    ChangelogGitOps
+)
+
+# Import models from core
+from tooling.core.models import (
     AnalysisMode,
     AnalysisMetrics,
     ConventionalCommit,
     GitCommit,
     VersionEntry,
     CHANGELOG_SECTIONS,
-    CONVENTIONAL_TYPES,
-    # From parser
-    ChangelogParser as ChangelogParserV2,
-    # From generator  
-    ChangelogGenerator as ChangelogGeneratorV2,
-    # From analyzer
-    CommitAnalyzer,
-    FileAnalyzer,
-    # From git_operations
-    ChangelogGitOps
+    CONVENTIONAL_TYPES
 )
 
 # Async utilities
@@ -215,6 +211,9 @@ __all__ = [
     'validate_changelog_format',
     
     # Changelog submodule
+    'ChangelogGitOps',
+    
+    # Models from core
     'AnalysisMode',
     'AnalysisMetrics',
     'ConventionalCommit',
@@ -222,11 +221,6 @@ __all__ = [
     'VersionEntry',
     'CHANGELOG_SECTIONS',
     'CONVENTIONAL_TYPES',
-    'ChangelogParserV2',
-    'ChangelogGeneratorV2',
-    'CommitAnalyzer',
-    'FileAnalyzer',
-    'ChangelogGitOps',
     
     # Async utilities
     'AsyncFileOperations',

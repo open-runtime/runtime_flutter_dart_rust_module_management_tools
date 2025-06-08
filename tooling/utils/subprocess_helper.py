@@ -52,27 +52,27 @@ def _try_installed_command(tool_name, args, **kwargs):
     """Try running as an installed command."""
     # Map tool names to command names
     command_map = {
-        'smart_commit': 'rt-commit',
-        'smart_commit_fast': 'rt-commit-fast',
-        'sync_changelogs': 'rt-changelog',
-        'sync_changelog_ultra': 'rt-changelog-ultra',
-        'analyze_changelog_history': 'rt-changelog-analyze',
-        'release': 'rt-release',
-        'prepare_new_patch': 'rt-prepare-patch',
-        'push_new_patch': 'rt-push-patch',
-        'retag_release': 'rt-retag',
-        'update_version': 'rt-version',
-        'get_new_patch_tag': 'rt-next-tag',
-        'validate_changelogs': 'rt-validate',
-        'pre_release_check': 'rt-prerelease-check',
-        'open_pull_request_current_tagged_branch': 'rt-pr',
-        'generate_release_notes': 'rt-release-notes',
-        'setup_ai_tools': 'rt-setup',
-        'setup_permissions': 'rt-setup-permissions',
-        'install_gemini_cli': 'rt-install-gemini',
+        'smart_commit': 'runtime_fdr_management_tools-commit',
+        'smart_commit_fast': 'runtime_fdr_management_tools-commit-fast',
+        'sync_changelogs': 'runtime_fdr_management_tools-changelog',
+        'sync_changelog_ultra': 'runtime_fdr_management_tools-changelog-ultra',
+        'analyze_changelog_history': 'runtime_fdr_management_tools-changelog-analyze',
+        'release': 'runtime_fdr_management_tools-release',
+        'prepare_new_patch': 'runtime_fdr_management_tools-prepare-patch',
+        'push_new_patch': 'runtime_fdr_management_tools-push-patch',
+        'retag_release': 'runtime_fdr_management_tools-retag',
+        'update_version': 'runtime_fdr_management_tools-version',
+        'get_new_patch_tag': 'runtime_fdr_management_tools-next-tag',
+        'validate_changelogs': 'runtime_fdr_management_tools-validate',
+        'pre_release_check': 'runtime_fdr_management_tools-prerelease-check',
+        'open_pull_request_current_tagged_branch': 'runtime_fdr_management_tools-pr',
+        'generate_release_notes': 'runtime_fdr_management_tools-release-notes',
+        'setup_ai_tools': 'runtime_fdr_management_tools-setup',
+        'setup_permissions': 'runtime_fdr_management_tools-setup-permissions',
+        'install_gemini_cli': 'runtime_fdr_management_tools-install-gemini',
     }
     
-    command = command_map.get(tool_name, f'rt-{tool_name.replace("_", "-")}')
+    command = command_map.get(tool_name, f'runtime_fdr_management_tools-{tool_name.replace("_", "-")}')
     return subprocess.run([command] + args, check=True, **kwargs)
 
 

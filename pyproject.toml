@@ -71,7 +71,7 @@ Issues = "https://github.com/open-runtime/runtime_flutter_dart_rust_module_manag
 
 [project.scripts]
 # Single unified entry point
-runtime_fdr_module_tools = "tooling.rt:cli"
+runtime_fdr_management_tools = "tooling.runtime_fdr_management_tools:cli"
 
 [tool.setuptools]
 packages = ["tooling", "tooling.core", "tooling.cli", "tooling.utils", "tooling.tests"]

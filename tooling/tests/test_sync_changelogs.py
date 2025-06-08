@@ -11,18 +11,22 @@ import os
 import unittest
 from pathlib import Path
 import tempfile
+import subprocess
+import shutil
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from tooling.cli.cli_utils import Colors
+    from tooling.cli.cli_utils import print_info, print_success, print_error, console
 except ImportError:
-    from cli.cli_utils import Colors
-
-def print_color(color, message):
-    """Print colored text"""
-    print(f"{color}{message}{Colors.NC}")
+    # Fallback for when cli_utils isn't available
+    def print_info(msg): print(f"ℹ {msg}")
+    def print_success(msg): print(f"✓ {msg}")
+    def print_error(msg): print(f"✗ {msg}")
+    class Console:
+        def print(self, msg, style=None): print(msg)
+    console = Console()
 
 
 class TestSyncChangelogs(unittest.TestCase):
@@ -63,7 +67,7 @@ All notable changes to this project will be documented in this file.
             versions = version_pattern.findall(content)
             
             self.assertEqual(len(versions), 2)
-            print_color(Colors.GREEN, f"✓ Found {len(versions)} versions in changelog")
+            print_success(f"Found {len(versions)} versions in changelog")
             
             # Test version extraction
             version_numbers = []
@@ -71,7 +75,7 @@ All notable changes to this project will be documented in this file.
                 version_numbers.append(match.group(1))
             
             self.assertEqual(version_numbers, ["0.0.2", "0.0.1"])
-            print_color(Colors.GREEN, "✓ Version extraction test passed")
+            print_success("Version extraction test passed")
             
         finally:
             # Clean up
@@ -79,20 +83,18 @@ All notable changes to this project will be documented in this file.
     
     def test_git_command_wrapper(self):
         """Test git command execution wrapper"""
-        import subprocess
-        
-        # Test running a simple git command
         try:
+            # Test basic git command
             result = subprocess.run(
                 ['git', '--version'],
                 capture_output=True,
                 text=True,
-                timeout=5
+                check=True
             )
             
             self.assertEqual(result.returncode, 0)
             self.assertIn('git version', result.stdout)
-            print_color(Colors.GREEN, f"✓ Git command test passed: {result.stdout.strip()}")
+            print_success(f"Git command test passed: {result.stdout.strip()}")
             
         except subprocess.TimeoutExpired:
             self.fail("Git command timed out")
@@ -131,7 +133,7 @@ All notable changes to this project will be documented in this file.
         self.assertEqual(len(sections['Added']), 2)
         self.assertEqual(len(sections['Fixed']), 2)
         
-        print_color(Colors.GREEN, "✓ Changelog section detection test passed")
+        print_success("Changelog section detection test passed")
 
 
 if __name__ == "__main__":

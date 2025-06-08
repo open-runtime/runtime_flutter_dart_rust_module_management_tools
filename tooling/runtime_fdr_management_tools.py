@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Runtime Tools - Unified CLI for Development Operations
+Runtime FRD (Flutter, Dart, Rust) Management Tools - Unified CLI for Development Operations
 
 A beautiful, interactive command-line interface for managing the
 runtime_flutter_dart_rust_module_management_tools project.
@@ -12,6 +12,7 @@ import sys
 import os
 import platform
 from pathlib import Path
+from typing import Dict, Any, List, Optional
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -34,7 +35,7 @@ setup_imports()
 console = Console()
 
 # Command registry
-COMMANDS = {
+COMMANDS: Dict[str, Dict[str, str]] = {
     'commit': {
         'module': 'tooling.cli.commit_tools',
         'class': 'CommitTools',
@@ -64,6 +65,11 @@ COMMANDS = {
         'module': 'tooling.cli.setup_tools',
         'class': 'SetupTools',
         'description': '🔧 Setup and configuration'
+    },
+    'contributors': {
+        'module': 'tooling.cli.contributor_analyzer',
+        'class': 'ContributorAnalyzer',
+        'description': '👥 Analyze contributors across GitHub organizations'
     }
 }
 
@@ -85,7 +91,7 @@ def cli(ctx, interactive, version):
         else:
             show_welcome()
 
-def show_welcome():
+def show_welcome() -> None:
     """Show welcome screen with available commands"""
     # Create title panel
     title = Text("Runtime Tools", style="bold magenta")
@@ -115,18 +121,18 @@ def show_welcome():
         table.add_row(
             cmd,
             info['description'],
-            f"rt {cmd} --help"
+            f"runtime_fdr_management_tools {cmd} --help"
         )
     
     console.print(table)
     
     # Show tips
     console.print("\n[bold yellow]💡 Tips:[/bold yellow]")
-    console.print("  • Use [cyan]rt -i[/cyan] for interactive mode")
-    console.print("  • Use [cyan]rt <command> --help[/cyan] for command help")
-    console.print("  • Install completions: [cyan]rt --install-completion[/cyan]")
+    console.print("  • Use [cyan]runtime_fdr_management_tools -i[/cyan] for interactive mode")
+    console.print("  • Use [cyan]runtime_fdr_management_tools <command> --help[/cyan] for command help")
+    console.print("  • Install completions: [cyan]runtime_fdr_management_tools --install-completion[/cyan]")
 
-def show_version():
+def show_version() -> None:
     """Show version information"""
     import tooling
     version_info = Panel(
@@ -139,50 +145,58 @@ def show_version():
     )
     console.print(version_info)
 
-def launch_interactive_mode():
+def launch_interactive_mode() -> None:
     """Launch interactive shell mode"""
     from tooling.cli.interactive_mode import InteractiveMode
     mode = InteractiveMode(console, COMMANDS)
     mode.run()
 
-# Register all commands
-@cli.command()
+# Register all commands with unknown option forwarding
+@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.pass_context
 def commit(ctx):
     """🚀 Generate smart commit messages with AI"""
     run_command('commit', ctx.args)
 
-@cli.command()
+@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.pass_context
 def release(ctx):
     """📦 Manage releases and versioning"""
     run_command('release', ctx.args)
 
-@cli.command()
+@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.pass_context
 def changelog(ctx):
     """📝 Sync and manage changelogs"""
     run_command('changelog', ctx.args)
 
-@cli.command()
+@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.pass_context
 def version(ctx):
     """🏷️ Version management tools"""
     run_command('version', ctx.args)
 
-@cli.command()
+@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.pass_context
 def pr(ctx):
     """🔀 Pull request management"""
     run_command('pr', ctx.args)
 
-@cli.command()
+@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.pass_context
 def setup(ctx):
     """🔧 Setup and configuration"""
     run_command('setup', ctx.args)
 
-def run_command(command: str, args: list):
+@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+@click.pass_context
+def contributors(ctx):
+    """👥 Analyze contributors across GitHub organizations"""
+    # Contributors is a global tool - bypass project structure validation
+    os.environ['ANY_STRUCTURE'] = '1'
+    return run_command('contributors', ctx.args)
+
+def run_command(command: str, args: List[str]) -> int:
     """Run a command by importing and executing its module"""
     cmd_info = COMMANDS.get(command)
     if not cmd_info:
@@ -221,13 +235,13 @@ def install_completion():
     
     if shell == 'zsh':
         completion_path = Path.home() / '.zshrc'
-        completion_cmd = 'eval "$(_RT_COMPLETE=zsh_source rt)"'
+        completion_cmd = 'eval "$(_RUNTIME_FDR_MANAGEMENT_TOOLS_COMPLETE=zsh_source runtime_fdr_management_tools)"'
     elif shell == 'bash':
         completion_path = Path.home() / '.bashrc'
-        completion_cmd = 'eval "$(_RT_COMPLETE=bash_source rt)"'
+        completion_cmd = 'eval "$(_RUNTIME_FDR_MANAGEMENT_TOOLS_COMPLETE=bash_source runtime_fdr_management_tools)"'
     elif shell == 'fish':
-        completion_path = Path.home() / '.config/fish/completions/rt.fish'
-        completion_cmd = '_RT_COMPLETE=fish_source rt'
+        completion_path = Path.home() / '.config/fish/completions/runtime_fdr_management_tools.fish'
+        completion_cmd = '_RUNTIME_FDR_MANAGEMENT_TOOLS_COMPLETE=fish_source runtime_fdr_management_tools'
         subprocess.run(completion_cmd, shell=True, capture_output=True)
         console.print(f"[green]✓ Installed fish completions to {completion_path}[/green]")
         return

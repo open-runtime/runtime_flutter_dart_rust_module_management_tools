@@ -4,10 +4,11 @@ Async file utilities for improved I/O performance.
 import asyncio
 import aiofiles
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Callable
+from typing import List, Dict, Optional, Any, Callable, Union
 import json
 import yaml
 import hashlib
+import os
 
 from tooling.core.logging import get_logger
 
@@ -20,20 +21,26 @@ class AsyncFileOperations:
     def __init__(self, max_concurrent: int = 20):
         self._semaphore = asyncio.Semaphore(max_concurrent)
     
-    async def read_file(self, path: Path, encoding: str = 'utf-8') -> str:
+    async def read_file(self, path: Union[str, Path], encoding: str = 'utf-8') -> str:
         """Read file asynchronously"""
         async with self._semaphore:
             try:
+                # Convert string to Path if needed
+                if isinstance(path, str):
+                    path = Path(path)
                 async with aiofiles.open(path, 'r', encoding=encoding) as f:
                     return await f.read()
             except Exception as e:
                 logger.error(f"Failed to read {path}: {e}")
                 raise
     
-    async def write_file(self, path: Path, content: str, encoding: str = 'utf-8') -> None:
+    async def write_file(self, path: Union[str, Path], content: str, encoding: str = 'utf-8') -> None:
         """Write file asynchronously"""
         async with self._semaphore:
             try:
+                # Convert string to Path if needed
+                if isinstance(path, str):
+                    path = Path(path)
                 # Ensure directory exists
                 path.parent.mkdir(parents=True, exist_ok=True)
                 
@@ -43,17 +50,21 @@ class AsyncFileOperations:
                 logger.error(f"Failed to write {path}: {e}")
                 raise
     
-    async def read_files_batch(self, paths: List[Path]) -> Dict[Path, str]:
+    async def read_files_batch(self, paths: List[Union[str, Path]]) -> Dict[Path, str]:
         """Read multiple files in parallel"""
         tasks = []
+        path_objects = []
         for path in paths:
+            if isinstance(path, str):
+                path = Path(path)
+            path_objects.append(path)
             task = self.read_file(path)
             tasks.append(task)
         
         contents = await asyncio.gather(*tasks, return_exceptions=True)
         
         result = {}
-        for path, content in zip(paths, contents):
+        for path, content in zip(path_objects, contents):
             if isinstance(content, Exception):
                 logger.warning(f"Failed to read {path}: {content}")
                 result[path] = ""
@@ -62,12 +73,14 @@ class AsyncFileOperations:
         
         return result
     
-    async def write_files_batch(self, files: Dict[Path, str]) -> Dict[Path, bool]:
+    async def write_files_batch(self, files: Dict[Union[str, Path], str]) -> Dict[Path, bool]:
         """Write multiple files in parallel"""
         tasks = []
         paths = []
         
         for path, content in files.items():
+            if isinstance(path, str):
+                path = Path(path)
             task = self.write_file(path, content)
             tasks.append(task)
             paths.append(path)
@@ -144,6 +157,73 @@ class AsyncFileOperations:
                 result[path] = checksum
         
         return result
+    
+    async def copy_file(self, src: Union[str, Path], dst: Union[str, Path]) -> None:
+        """Copy file asynchronously"""
+        content = await self.read_file(src)
+        await self.write_file(dst, content)
+    
+    async def move_file(self, src: Union[str, Path], dst: Union[str, Path]) -> None:
+        """Move file asynchronously"""
+        await self.copy_file(src, dst)
+        await self.delete_file(src)
+    
+    async def delete_file(self, path: Union[str, Path]) -> None:
+        """Delete file asynchronously"""
+        if isinstance(path, str):
+            path = Path(path)
+        
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, path.unlink)
+    
+    async def exists(self, path: Union[str, Path]) -> bool:
+        """Check if file exists asynchronously"""
+        if isinstance(path, str):
+            path = Path(path)
+        
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, path.exists)
+    
+    async def get_size(self, path: Union[str, Path]) -> int:
+        """Get file size asynchronously"""
+        if isinstance(path, str):
+            path = Path(path)
+        
+        loop = asyncio.get_event_loop()
+        stat_result = await loop.run_in_executor(None, path.stat)
+        return stat_result.st_size
+    
+    async def list_directory(self, path: Union[str, Path]) -> List[str]:
+        """List directory contents asynchronously"""
+        if isinstance(path, str):
+            path = Path(path)
+        
+        loop = asyncio.get_event_loop()
+        
+        def _list_dir():
+            return [item.name for item in path.iterdir()]
+        
+        return await loop.run_in_executor(None, _list_dir)
+    
+    async def walk_directory(self, path: Union[str, Path]):
+        """Walk directory tree asynchronously (async generator)"""
+        if isinstance(path, str):
+            path = Path(path)
+        
+        loop = asyncio.get_event_loop()
+        
+        # Get the walk results in executor
+        def _walk():
+            results = []
+            for root, dirs, files in os.walk(path):
+                results.append((root, dirs[:], files[:]))
+            return results
+        
+        walk_results = await loop.run_in_executor(None, _walk)
+        
+        # Yield results as async generator
+        for root, dirs, files in walk_results:
+            yield root, dirs, files
 
 
 class AsyncJSONOperations:
@@ -236,9 +316,37 @@ class AsyncYAMLOperations:
 class FileBatchProcessor:
     """Process files in optimized batches"""
     
-    def __init__(self, batch_size: int = 100):
+    def __init__(self, batch_size: int = 100, max_concurrent: int = 20):
         self.batch_size = batch_size
-        self.file_ops = AsyncFileOperations()
+        self.max_concurrent = max_concurrent
+        self.file_ops = AsyncFileOperations(max_concurrent=max_concurrent)
+    
+    async def process_files(
+        self,
+        file_paths: List[str],
+        processor: Callable[[str], Any]
+    ) -> Dict[str, Any]:
+        """Process a list of files with a processor function"""
+        results = {}
+        
+        # Convert to Path objects
+        paths = [Path(p) for p in file_paths]
+        
+        # Process files
+        for path in paths:
+            try:
+                if asyncio.iscoroutinefunction(processor):
+                    result = await processor(str(path))
+                else:
+                    # Run sync processor in thread pool
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, processor, str(path))
+                results[str(path)] = result
+            except Exception as e:
+                logger.error(f"Failed to process {path}: {e}")
+                results[str(path)] = None
+        
+        return results
     
     async def process_large_directory(
         self,

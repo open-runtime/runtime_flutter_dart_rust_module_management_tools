@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.markdown import Markdown
+from rich import box
 from pathlib import Path
 import os
 import sys
@@ -312,7 +313,7 @@ class InteractiveMode:
             "[bold cyan]Welcome to Runtime Tools Interactive Mode![/bold cyan]\n\n"
             "Type [green]help[/green] for available commands\n"
             "Type [red]exit[/red] to quit",
-            box=Panel.ASCII,
+            box=box.ASCII,
             padding=(1, 2)
         )
         self.console.print(welcome)

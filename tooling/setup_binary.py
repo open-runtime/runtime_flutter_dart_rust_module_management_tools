@@ -14,19 +14,19 @@ from pathlib import Path
 PLATFORM_CONFIGS = {
     'Darwin': {
         'name': 'macos',
-        'binary_name': 'rt',
+        'binary_name': 'runtime_fdr_management_tools',
         'icon': None,  # Can add .icns file later
         'extra_args': ['--windowed=False']
     },
     'Linux': {
         'name': 'linux',
-        'binary_name': 'rt',
+        'binary_name': 'runtime_fdr_management_tools',
         'icon': None,
         'extra_args': []
     },
     'Windows': {
         'name': 'windows',
-        'binary_name': 'rt.exe',
+        'binary_name': 'runtime_fdr_management_tools.exe',
         'icon': None,  # Can add .ico file later
         'extra_args': ['--console']
     }
@@ -49,7 +49,7 @@ ROOT_DIR = Path(os.path.abspath(SPECPATH)).parent
 sys.path.insert(0, str(ROOT_DIR))
 
 a = Analysis(
-    ['rt.py'],
+    ['runtime_fdr_management_tools.py'],
     pathex=[str(ROOT_DIR)],
     binaries=[],
     datas=[
@@ -77,6 +77,7 @@ a = Analysis(
         'tooling.cli.version_tools',
         'tooling.cli.setup_tools',
         'tooling.cli.changelog_tools',
+        'tooling.cli.contributor_analyzer',
         
         # Utils
         'tooling.utils.git_utils',
@@ -92,6 +93,7 @@ a = Analysis(
         'rich.table',
         'rich.panel',
         'rich.progress',
+        'rich.prompt',
         'rich.syntax',
         'prompt_toolkit',
         'questionary',
@@ -99,6 +101,7 @@ a = Analysis(
         'yaml',
         'git',
         'aiofiles',
+        'aiohttp',
         'httpx',
         'tenacity',
         'structlog',
@@ -180,7 +183,7 @@ def build_binary():
     )
     
     # Write spec file
-    spec_path = Path('rt.spec')
+    spec_path = Path('runtime_fdr_management_tools.spec')
     with open(spec_path, 'w') as f:
         f.write(spec_content)
     
@@ -200,7 +203,7 @@ def build_binary():
         cmd.append(f'--icon={config["icon"]}')
     
     cmd.extend(config['extra_args'])
-    cmd.append('rt.spec')
+    cmd.append('runtime_fdr_management_tools.spec')
     
     result = os.system(' '.join(cmd))
     
@@ -225,32 +228,32 @@ def create_platform_script():
     """Create platform-specific wrapper scripts"""
     # Windows batch file
     batch_content = """@echo off
-python "%~dp0\\tooling\\rt.py" %*
+python "%~dp0\\tooling\\runtime_fdr_management_tools.py" %*
 """
     
     # Unix shell script
     shell_content = """#!/bin/bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-python3 "$DIR/tooling/rt.py" "$@"
+python3 "$DIR/tooling/runtime_fdr_management_tools.py" "$@"
 """
     
     # PowerShell script
     ps_content = """$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-& python "$scriptPath\\tooling\\rt.py" $args
+& python "$scriptPath\\tooling\\runtime_fdr_management_tools.py" $args
 """
     
     # Create scripts
     if platform.system() == 'Windows':
-        with open('rt.bat', 'w') as f:
+        with open('runtime_fdr_management_tools.bat', 'w') as f:
             f.write(batch_content)
-        with open('rt.ps1', 'w') as f:
+        with open('runtime_fdr_management_tools.ps1', 'w') as f:
             f.write(ps_content)
-        print("✓ Created rt.bat and rt.ps1")
+        print("✓ Created runtime_fdr_management_tools.bat and runtime_fdr_management_tools.ps1")
     else:
-        with open('rt', 'w') as f:
+        with open('runtime_fdr_management_tools', 'w') as f:
             f.write(shell_content)
-        os.chmod('rt', 0o755)
-        print("✓ Created rt shell script")
+        os.chmod('runtime_fdr_management_tools', 0o755)
+        print("✓ Created runtime_fdr_management_tools shell script")
 
 
 def main():

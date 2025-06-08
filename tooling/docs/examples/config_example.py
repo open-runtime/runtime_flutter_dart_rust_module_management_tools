@@ -62,19 +62,19 @@ def demonstrate_migration_helper():
     # Use old-style functions with new config
     helper.print_header("Migration Helper Demo")
     
-    # Old-style color printing
-    from tooling.cli.cli_utils import Colors
-    helper.print_color(Colors.GREEN, "✓ Success message")
-    helper.print_color(Colors.RED, "✗ Error message")
-    helper.print_color(Colors.YELLOW, "⚠ Warning message")
-    helper.print_color(Colors.BLUE, "ℹ Info message")
+    # New-style Rich-based printing
+    from tooling.cli.cli_utils import print_success, print_error, print_warning, print_info, console
+    print_success("✓ Success message")
+    print_error("✗ Error message")
+    print_warning("⚠ Warning message")
+    print_info("ℹ Info message")
     
     # Get package info in old format
     old_style_info = helper.get_package_info()
     helper.print_header("Old-Style Package Info")
     
     for key, info in old_style_info.items():
-        helper.print_color(Colors.GRAY, f"{key}: {info['name']}")
+        console.print(f"{key}: {info['name']}", style="dim")
     
     print("\n" + "="*60 + "\n")
 

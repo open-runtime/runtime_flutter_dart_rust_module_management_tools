@@ -9,15 +9,24 @@ import tempfile
 import argparse
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+import json
+import time
+from datetime import datetime
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.logging import setup_logging, get_logger, ProgressLogger, log_context
 try:
-    from tooling.cli.cli_utils import Colors, run_command
+    from tooling.cli.cli_utils import (
+        setup_cli_logging, print_info, print_success, print_error, print_warning,
+        print_header, console, run_command
+    )
 except ImportError:
-    from cli.cli_utils import Colors, run_command
+    from cli.cli_utils import (
+        setup_cli_logging, print_info, print_success, print_error, print_warning,
+        print_header, console, run_command
+    )
 
 # Create a mock config for testing
 def get_mock_config():
@@ -31,16 +40,11 @@ def get_mock_config():
     config.quiet = False
     return config
 
-def print_color(color, message):
-    """Print colored text"""
-    print(f"{color}{message}{Colors.NC}")
-
-def print_header(title):
-    """Print a header"""
-    print_color(Colors.PURPLE, f"\n{'='*60}")
-    print_color(Colors.PURPLE, title)
-    print_color(Colors.PURPLE, f"{'='*60}\n")
-from cli.cli_utils import setup_cli_logging, print_info, print_success, print_error, print_warning
+def print_test_header(title):
+    """Print a test section header"""
+    console.print(f"\n{'='*60}", style="magenta")
+    console.print(title, style="magenta")
+    console.print(f"{'='*60}\n", style="magenta")
 
 def test_basic_logging():
     """Test basic logging functionality"""
@@ -72,6 +76,13 @@ def test_basic_logging():
             logger.error("Error message", code=404)
         finally:
             os.chdir(original_cwd)
+
+    # Test colored output
+    print_test_header("Testing Colored Output")
+    print_success("Feature implemented")
+    print_warning("Check configuration")
+    print_error("Missing dependency")
+    print_info("Processing complete")
 
 def test_json_logging():
     """Test JSON output mode"""
@@ -137,10 +148,10 @@ def test_cli_utils_integration():
     
     # Use print functions that now integrate with logging
     print_header("Test Section")
-    print_color(Colors.GREEN, "Success: Feature implemented")
-    print_color(Colors.YELLOW, "Warning: Check configuration")
-    print_color(Colors.RED, "Error: Missing dependency")
-    print_color(Colors.BLUE, "Info: Processing complete")
+    print_success("Success: Feature implemented")
+    print_warning("Warning: Check configuration")
+    print_error("Error: Missing dependency")
+    print_info("Info: Processing complete")
 
 def test_cli_utils():
     """Test CLI utilities"""

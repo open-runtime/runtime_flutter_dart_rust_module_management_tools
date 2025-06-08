@@ -6,7 +6,7 @@ import subprocess
 from typing import List, Optional, Tuple
 from functools import lru_cache
 
-from .models import GitCommit
+from tooling.core.models import GitCommit
 
 
 class ChangelogGitOps:

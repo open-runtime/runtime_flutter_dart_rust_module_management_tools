@@ -101,6 +101,10 @@ class BaseConfig(BaseSettings):
         if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
             return v
         
+        # Skip validation if --any flag is present (for global tools)
+        if os.environ.get("RUNTIME_FDR_ANY_STRUCTURE") or os.environ.get("ANY_STRUCTURE"):
+            return v
+        
         dart_pubspec = v / "dart" / "pubspec.yaml"
         flutter_pubspec = v / "flutter" / "pubspec.yaml"
         
@@ -374,11 +378,20 @@ def get_config(**overrides) -> ToolingConfig:
     from tooling.core.base_config import get_config
     
     config = get_config(verbose=True, dry_run=True)
+    config = get_config(any_structure=True)  # Skip project structure validation
     ```
     """
+    # Handle any_structure flag to bypass validation
+    if overrides.get("any_structure", False):
+        os.environ["ANY_STRUCTURE"] = "1"
+    
     # Set a reasonable default project_root if not provided and in test environment
     if "project_root" not in overrides and (os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("_PYTEST_RAISE")):
         # Use parent directory as project root in tests
         overrides["project_root"] = Path.cwd().parent if (Path.cwd() / "tests").exists() else Path.cwd()
+    
+    # Remove any_structure from overrides as it's not a ToolingConfig field
+    if "any_structure" in overrides:
+        del overrides["any_structure"]
     
     return ToolingConfig(**overrides)

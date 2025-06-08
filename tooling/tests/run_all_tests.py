@@ -16,13 +16,17 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from tooling.cli.cli_utils import Colors
+    from tooling.cli.cli_utils import print_info, print_success, print_error, print_warning, print_header, console
 except ImportError:
-    from cli.cli_utils import Colors
-
-def print_color(color, message):
-    """Print colored text"""
-    print(f"{color}{message}{Colors.NC}")
+    # Fallback for when cli_utils isn't available
+    def print_info(msg): print(f"ℹ {msg}")
+    def print_success(msg): print(f"✓ {msg}")
+    def print_error(msg): print(f"✗ {msg}")
+    def print_warning(msg): print(f"⚠ {msg}")
+    def print_header(msg): print(f"\n{'='*60}\n{msg}\n{'='*60}\n")
+    class Console:
+        def print(self, msg, style=None): print(msg)
+    console = Console()
 
 
 class TestRunner:
@@ -59,7 +63,7 @@ class TestRunner:
     
     def run_test_file(self, test_file):
         """Run a single test file"""
-        print_color(Colors.BLUE, f"Running {test_file.name}...")
+        print_info(f"Running {test_file.name}...")
         
         cmd = [sys.executable, '-m', 'pytest', str(test_file)]
         
@@ -86,9 +90,9 @@ class TestRunner:
     
     def run_test_group(self, group_name, test_files):
         """Run a group of test files"""
-        print_color(Colors.PURPLE, f"\n{'='*60}")
-        print_color(Colors.PURPLE, f"Running {group_name} tests")
-        print_color(Colors.PURPLE, f"{'='*60}\n")
+        console.print(f"\n{'='*60}", style="magenta")
+        console.print(f"Running {group_name} tests", style="magenta")
+        console.print(f"{'='*60}\n", style="magenta")
         
         group_results = []
         
@@ -97,9 +101,9 @@ class TestRunner:
             group_results.append(result)
             
             if result['passed']:
-                print_color(Colors.GREEN, f"✓ {result['file']} ({result['duration']:.2f}s)")
+                print_success(f"{result['file']} ({result['duration']:.2f}s)")
             else:
-                print_color(Colors.RED, f"✗ {result['file']} ({result['duration']:.2f}s)")
+                print_error(f"{result['file']} ({result['duration']:.2f}s)")
                 if self.verbose:
                     print(result['stderr'])
         
@@ -110,7 +114,7 @@ class TestRunner:
         self.start_time = time.time()
         test_groups = self.discover_tests()
         
-        print_color(Colors.BLUE, f"Discovered {sum(len(files) for files in test_groups.values())} test files in {len(test_groups)} groups")
+        print_info(f"Discovered {sum(len(files) for files in test_groups.values())} test files in {len(test_groups)} groups")
         
         # Initialize coverage if requested
         if self.coverage:
@@ -138,7 +142,7 @@ class TestRunner:
     
     def generate_coverage_report(self):
         """Generate coverage report"""
-        print_color(Colors.BLUE, "\nGenerating coverage report...")
+        print_info("Generating coverage report...")
         
         # Generate terminal report
         subprocess.run([
@@ -155,15 +159,15 @@ class TestRunner:
             '-d', 'htmlcov'
         ])
         
-        print_color(Colors.GREEN, "Coverage report generated in htmlcov/")
+        print_success("Coverage report generated in htmlcov/")
     
     def print_summary(self):
         """Print test summary"""
         total_duration = time.time() - self.start_time
         
-        print_color(Colors.PURPLE, f"\n{'='*60}")
-        print_color(Colors.PURPLE, "Test Summary")
-        print_color(Colors.PURPLE, f"{'='*60}\n")
+        console.print(f"\n{'='*60}", style="magenta")
+        console.print("Test Summary", style="magenta")
+        console.print(f"{'='*60}\n", style="magenta")
         
         total_tests = 0
         passed_tests = 0
@@ -177,26 +181,26 @@ class TestRunner:
             failed_tests += (group_total - group_passed)
             
             if group_passed == group_total:
-                print_color(Colors.GREEN, f"✓ {group_name}: {group_passed}/{group_total} passed")
+                print_success(f"{group_name}: {group_passed}/{group_total} passed")
             else:
-                print_color(Colors.RED, f"✗ {group_name}: {group_passed}/{group_total} passed")
+                print_error(f"{group_name}: {group_passed}/{group_total} passed")
         
-        print_color(Colors.PURPLE, f"\n{'─'*60}")
+        console.print(f"\n{'─'*60}", style="magenta")
         
         if failed_tests == 0:
-            print_color(Colors.GREEN, f"✓ All tests passed! ({passed_tests}/{total_tests})")
+            print_success(f"All tests passed! ({passed_tests}/{total_tests})")
         else:
-            print_color(Colors.RED, f"✗ {failed_tests} tests failed ({passed_tests}/{total_tests} passed)")
+            print_error(f"{failed_tests} tests failed ({passed_tests}/{total_tests} passed)")
         
-        print_color(Colors.BLUE, f"Total duration: {total_duration:.2f}s")
+        print_info(f"Total duration: {total_duration:.2f}s")
         
         # List failed tests
         if failed_tests > 0:
-            print_color(Colors.RED, "\nFailed tests:")
+            print_error("Failed tests:")
             for group_name, group_results in self.results.items():
                 for result in group_results:
                     if not result['passed']:
-                        print_color(Colors.RED, f"  - {group_name}/{result['file']}")
+                        print_error(f"  - {group_name}/{result['file']}")
     
     def save_results(self, output_file):
         """Save test results to JSON file"""
@@ -214,7 +218,7 @@ class TestRunner:
         with open(output_file, 'w') as f:
             json.dump(results_data, f, indent=2)
         
-        print_color(Colors.GREEN, f"Results saved to {output_file}")
+        print_success(f"Results saved to {output_file}")
 
 
 def main():
@@ -233,7 +237,7 @@ def main():
     try:
         import pytest
     except ImportError:
-        print_color(Colors.RED, "pytest is not installed. Please run: pip install pytest")
+        print_error("pytest is not installed. Please run: pip install pytest")
         return 1
     
     # Check coverage is installed if requested
@@ -241,7 +245,7 @@ def main():
         try:
             import coverage
         except ImportError:
-            print_color(Colors.RED, "coverage is not installed. Please run: pip install pytest-cov")
+            print_error("coverage is not installed. Please run: pip install pytest-cov")
             return 1
     
     runner = TestRunner(
@@ -254,7 +258,7 @@ def main():
     if args.file:
         test_file = Path(args.file)
         if not test_file.exists():
-            print_color(Colors.RED, f"Test file not found: {args.file}")
+            print_error(f"Test file not found: {args.file}")
             return 1
         
         result = runner.run_test_file(test_file)

@@ -1,5 +1,5 @@
 """
-Data models for changelog management.
+Core data models for the tooling system.
 """
 import re
 from dataclasses import dataclass
@@ -159,18 +159,18 @@ class AnalysisMetrics:
         if self.total_commits == 0:
             return
             
-        from tooling.cli.cli_utils import Colors, print_color, print_header
+        from tooling.cli.cli_utils import print_header, print_info
         
         print_header("Analysis Metrics")
-        print_color(Colors.INFO, f"Total commits processed: {self.total_commits}")
-        print_color(Colors.INFO, f"Total files analyzed: {self.total_files}")
-        print_color(Colors.INFO, f"LLM API calls: {self.llm_calls}")
+        print_info(f"Total commits processed: {self.total_commits}")
+        print_info(f"Total files analyzed: {self.total_files}")
+        print_info(f"LLM API calls: {self.llm_calls}")
         
         if self.cache_hits + self.cache_misses > 0:
             cache_rate = (self.cache_hits / (self.cache_hits + self.cache_misses)) * 100
-            print_color(Colors.INFO, f"Cache hit rate: {cache_rate:.1f}%")
+            print_info(f"Cache hit rate: {cache_rate:.1f}%")
             
-        print_color(Colors.INFO, f"Processing time: {self.processing_time:.1f}s")
+        print_info(f"Processing time: {self.processing_time:.1f}s")
 
 
 # Conventional commit type mapping

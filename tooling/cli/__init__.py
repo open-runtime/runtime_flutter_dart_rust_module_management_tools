@@ -7,6 +7,7 @@ Unified tools:
 - commit_tools.py - Commit message generation
 - changelog_tools.py - Changelog management (validate, analyze)
 - pr_tools.py - Pull request management (create, open, list)
+- contributor_analyzer.py - GitHub contributor analysis across organizations
 
 Specialized tools:
 - sync_changelogs.py - Advanced changelog synchronization (3900+ lines)
@@ -20,6 +21,7 @@ CLI_TOOLS = [
     'commit_tools',
     'changelog_tools',
     'pr_tools',
+    'contributor_analyzer',
     'sync_changelogs',
 ]
 
@@ -30,6 +32,7 @@ TOOL_DESCRIPTIONS = {
     'commit_tools': 'AI-powered commit message generation',
     'changelog_tools': 'Changelog validation and analysis',
     'pr_tools': 'Pull request creation and management',
+    'contributor_analyzer': 'GitHub contributor analysis across organizations',
     'sync_changelogs': 'Advanced changelog synchronization with AI',
 }
 

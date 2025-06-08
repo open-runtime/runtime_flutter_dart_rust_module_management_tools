@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 import pickle
 
-from google import genai
-from google.genai import types
+import google.generativeai as genai
+from google.generativeai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from jinja2 import Environment, FileSystemLoader
 
@@ -183,15 +183,22 @@ class GeminiClient:
         cache_enabled: bool = True,
         cache_ttl: int = 3600
     ):
-        self.config = config or ToolingConfig()
-        self.api_key = api_key or os.getenv('GEMINI_API_KEY') or self.config.ai_api_key
+        # Create minimal config if none provided to avoid validation
+        if config is None:
+            self.config = type('MinimalConfig', (), {
+                'ai_api_key': None
+            })()
+        else:
+            self.config = config
+            
+        self.api_key = api_key or os.getenv('GEMINI_API_KEY') or getattr(self.config, 'ai_api_key', None)
         
         if not self.api_key:
             raise ValueError("Gemini API key not provided. Set GEMINI_API_KEY environment variable.")
         
-        # Initialize client
-        self.client = genai.Client(api_key=self.api_key)
-        self.default_model = 'gemini-2.0-flash-001'
+        # Configure the API key
+        genai.configure(api_key=self.api_key)
+        self.default_model = 'gemini-2.0-flash'
         
         # Initialize components
         self.cache = ResponseCache(ttl=cache_ttl) if cache_enabled else None
@@ -199,7 +206,7 @@ class GeminiClient:
         
         logger.info("gemini_client_initialized", model=self.default_model, cache=cache_enabled)
     
-    def _build_config(self, **kwargs) -> types.GenerateContentConfig:
+    def _build_config(self, **kwargs) -> types.GenerationConfig:
         """Build generation config from kwargs"""
         config_dict = {
             'temperature': kwargs.get('temperature', 0.7),
@@ -214,7 +221,7 @@ class GeminiClient:
         if 'stop_sequences' in kwargs:
             config_dict['stop_sequences'] = kwargs['stop_sequences']
         
-        return types.GenerateContentConfig(**config_dict)
+        return types.GenerationConfig(**config_dict)
     
     @retry(
         stop=stop_after_attempt(3),
@@ -262,10 +269,13 @@ class GeminiClient:
             
             config = self._build_config(**kwargs)
             
-            response = await self.client.aio.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=config
+            # Create model instance
+            model_instance = genai.GenerativeModel(model_name=model)
+            
+            # Generate content
+            response = await model_instance.generate_content_async(
+                prompt,
+                generation_config=config
             )
             
             # Extract token counts if available
@@ -342,11 +352,11 @@ class GeminiClient:
         
         config = self._build_config(**kwargs)
         
-        for chunk in self.client.models.generate_content_stream(
-            model=model,
-            contents=prompt,
-            config=config
-        ):
+        # Create model instance
+        model_instance = genai.GenerativeModel(model_name=model)
+        
+        # Generate streaming content
+        for chunk in model_instance.generate_content(prompt, generation_config=config, stream=True):
             yield chunk.text
     
     async def generate_content_stream_async(
@@ -368,21 +378,22 @@ class GeminiClient:
         
         config = self._build_config(**kwargs)
         
-        async for chunk in await self.client.aio.models.generate_content_stream(
-            model=model,
-            contents=prompt,
-            config=config
-        ):
+        # Create model instance
+        model_instance = genai.GenerativeModel(model_name=model)
+        
+        # Generate streaming content asynchronously
+        async for chunk in model_instance.generate_content_async(prompt, generation_config=config, stream=True):
             yield chunk.text
     
     def count_tokens(self, text: str, model: Optional[str] = None) -> int:
         """Count tokens in text"""
         model = model or self.default_model
         
-        response = self.client.models.count_tokens(
-            model=model,
-            contents=text
-        )
+        # Create model instance
+        model_instance = genai.GenerativeModel(model_name=model)
+        
+        # Count tokens
+        response = model_instance.count_tokens(text)
         
         return response.total_tokens
     

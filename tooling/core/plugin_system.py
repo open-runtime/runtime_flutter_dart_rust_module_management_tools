@@ -142,7 +142,7 @@ class PluginManager:
             self.plugin_paths.append(user_plugin_dir)
         
         # Project plugins
-        project_plugin_dir = Path.cwd() / '.rt-plugins'
+        project_plugin_dir = Path.cwd() / '.runtime_fdr_management_tools-plugins'
         if project_plugin_dir.exists():
             self.plugin_paths.append(project_plugin_dir)
         

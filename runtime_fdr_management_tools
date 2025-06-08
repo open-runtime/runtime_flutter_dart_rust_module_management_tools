@@ -1,0 +1,2 @@
+#!/bin/bash
+python3 "$(dirname "$0")/tooling/runtime_fdr_management_tools.py" "$@"

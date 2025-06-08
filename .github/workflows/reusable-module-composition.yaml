@@ -24,10 +24,10 @@ env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GCP_PROJECT_ID: 'global-cloud-runtime'
   VERSION: ${{ inputs.version }}
-  GCS_BASE_PATH: 'open-runtime-ci-cd-dynamic-libraries/runtime_fdr_pkg_tools'
-  PACKAGE_NAME: 'runtime-fdr-pkg-tools'
-  PYTHON_PACKAGE_NAME: 'runtime_fdr_pkg_tools'
-  CLI_BINARY_NAME: 'runtime-fdr-pkg-tools'
+  GCS_BASE_PATH: 'open-runtime-ci-cd-dynamic-libraries/runtime_fdr_management_tools'
+  PACKAGE_NAME: 'runtime_frd_management_tools'
+  PYTHON_PACKAGE_NAME: 'runtime_fdr_management_tools'
+  CLI_BINARY_NAME: 'runtime_fdr_management_tools'
 
 jobs:
   compose:
@@ -217,7 +217,7 @@ jobs:
       - name: Build Standalone CLI Binary
         run: |
           echo "Building standalone CLI binary for ${{ matrix.config.name }}..."
-          pyinstaller --onefile --name ${{ env.CLI_BINARY_NAME }} tooling/cli/main.py
+          pyinstaller --onefile --name ${{ env.CLI_BINARY_NAME }} tooling/runtime_fdr_management_tools.py
           
           # Verify the binary was created
           if [[ "${{ matrix.config.system_information.operating_system_family }}" == "windows" ]]; then
